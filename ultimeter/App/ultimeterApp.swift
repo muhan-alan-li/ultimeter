@@ -12,7 +12,7 @@ import SwiftData
 struct ultimeterApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Team.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +25,7 @@ struct ultimeterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TeamListView()
         }
         .modelContainer(sharedModelContainer)
     }
