@@ -25,3 +25,5 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 
 Write all .md files, including plans, in ASD-STE100 (Simplified Technical English):
 approved words only, sentences under 20 words, active voice, imperative mood, short paragraphs.
+
+Keep .md files and documentation concise.
