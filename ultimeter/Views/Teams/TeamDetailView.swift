@@ -6,11 +6,20 @@
 import SwiftUI
 import SwiftData
 
-/// Shows the roster of a team. Lets the user add and remove players.
+/// The two tabs of the team detail view.
+enum TeamDetailTab: String, CaseIterable, Identifiable {
+    case roster = "Roster"
+    case games = "Games"
+
+    var id: Self { self }
+}
+
+/// Shows the roster or the game history of a team.
 struct TeamDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let team: Team
 
+    @State private var selectedTab: TeamDetailTab = .roster
     @State private var showingNewPlayer = false
     @State private var showingAddExisting = false
 
@@ -19,26 +28,38 @@ struct TeamDetailView: View {
     }
 
     var body: some View {
-        Group {
-            if team.players.isEmpty {
-                emptyState
-            } else {
-                playerList
+        VStack(spacing: 0) {
+            Picker("Section", selection: $selectedTab) {
+                ForEach(TeamDetailTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            switch selectedTab {
+            case .roster:
+                rosterTab
+            case .games:
+                GameListView(team: team)
             }
         }
         .navigationTitle(team.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("New Player") {
-                        showingNewPlayer = true
+                if selectedTab == .roster {
+                    Menu {
+                        Button("New Player") {
+                            showingNewPlayer = true
+                        }
+                        Button("Existing Player") {
+                            showingAddExisting = true
+                        }
+                    } label: {
+                        Label("Add Player", systemImage: "plus")
                     }
-                    Button("Existing Player") {
-                        showingAddExisting = true
-                    }
-                } label: {
-                    Label("Add Player", systemImage: "plus")
                 }
             }
         }
@@ -47,6 +68,17 @@ struct TeamDetailView: View {
         }
         .sheet(isPresented: $showingAddExisting) {
             AddExistingPlayerView(team: team)
+        }
+    }
+
+    @ViewBuilder
+    private var rosterTab: some View {
+        Group {
+            if team.players.isEmpty {
+                emptyState
+            } else {
+                playerList
+            }
         }
     }
 
@@ -90,5 +122,5 @@ struct TeamDetailView: View {
     NavigationStack {
         TeamDetailView(team: Team(name: "Example Team", division: .mixed))
     }
-    .modelContainer(for: [Team.self, Player.self], inMemory: true)
+    .modelContainer(for: [Team.self, Player.self, Game.self, Opponent.self, Tournament.self], inMemory: true)
 }

@@ -13,7 +13,10 @@ struct UltimeterApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Team.self,
-            Player.self
+            Player.self,
+            Game.self,
+            Opponent.self,
+            Tournament.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

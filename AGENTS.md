@@ -4,7 +4,8 @@ Ulti Stats - Ultimate frisbee stat-taking iOS app.
 
 - `ultimeter/App/` — app entry point and setup
 - `ultimeter/Models/` — SwiftData models. No UI code.
-- `ultimeter/Views/` — SwiftUI views. One screen or component each.
+- `ultimeter/Views/` — SwiftUI screens, in a subfolder per model.
+- `ultimeter/Components/` — Reusable UI components. Not tied to a specific screen.
 - One type per file, named after the type.
 - Xcode uses synchronized groups. Move files with `git mv`; never edit `project.pbxproj`.
 
