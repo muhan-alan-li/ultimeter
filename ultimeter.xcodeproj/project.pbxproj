@@ -72,12 +72,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		FC2BE717304638FA00704D10 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		FC46E241303FDD210005BD67 = {
 			isa = PBXGroup;
 			children = (
 				FC46E24C303FDD210005BD67 /* ultimeter */,
 				FC46E25C303FDD230005BD67 /* ultimeterTests */,
 				FC46E266303FDD230005BD67 /* ultimeterUITests */,
+				FC2BE717304638FA00704D10 /* Frameworks */,
 				FC46E24B303FDD210005BD67 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -195,6 +203,8 @@
 			);
 			mainGroup = FC46E241303FDD210005BD67;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FC46E24B303FDD210005BD67 /* Products */;
 			projectDirPath = "";
