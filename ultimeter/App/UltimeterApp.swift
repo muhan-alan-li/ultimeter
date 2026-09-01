@@ -9,10 +9,11 @@ import SwiftUI
 import SwiftData
 
 @main
-struct ultimeterApp: App {
+struct UltimeterApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Team.self,
+            Player.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

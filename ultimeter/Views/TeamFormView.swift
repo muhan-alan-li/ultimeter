@@ -100,10 +100,10 @@ struct TeamFormView: View {
 
 #Preview("New Team") {
     TeamFormView()
-        .modelContainer(for: Team.self, inMemory: true)
+        .modelContainer(for: [Team.self, Player.self], inMemory: true)
 }
 
 #Preview("Edit Team") {
     TeamFormView(team: Team(name: "Example Team", division: .mixed))
-        .modelContainer(for: Team.self, inMemory: true)
+        .modelContainer(for: [Team.self, Player.self], inMemory: true)
 }

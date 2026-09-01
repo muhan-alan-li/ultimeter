@@ -84,7 +84,7 @@ struct TeamListView: View {
         List {
             ForEach(teams) { team in
                 NavigationLink {
-                    TeamDetailPlaceholderView(team: team)
+                    TeamDetailView(team: team)
                 } label: {
                     TeamRowView(team: team)
                 }
@@ -133,22 +133,7 @@ struct TeamRowView: View {
     }
 }
 
-/// A placeholder for the team detail view. A future plan defines it.
-struct TeamDetailPlaceholderView: View {
-    let team: Team
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(team.name, systemImage: "trophy")
-        } description: {
-            Text("The team detail view is planned for a future update.")
-        }
-        .navigationTitle(team.name)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 #Preview {
     TeamListView()
-        .modelContainer(for: Team.self, inMemory: true)
+        .modelContainer(for: [Team.self, Player.self], inMemory: true)
 }

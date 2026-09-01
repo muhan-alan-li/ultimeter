@@ -30,6 +30,7 @@ final class Team {
     var name: String
     var division: Division
     var createdAt: Date
+    var players: [Player] = []
 
     init(name: String, division: Division, createdAt: Date = Date()) {
         self.name = name
