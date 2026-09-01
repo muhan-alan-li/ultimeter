@@ -31,6 +31,8 @@ final class Team {
     var division: Division
     var createdAt: Date
     var players: [Player] = []
+    @Relationship(deleteRule: .cascade, inverse: \Game.team)
+    var games: [Game] = []
 
     init(name: String, division: Division, createdAt: Date = Date()) {
         self.name = name
