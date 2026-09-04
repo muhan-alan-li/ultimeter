@@ -12,11 +12,36 @@ struct GameDetailView: View {
 
     var body: some View {
         List {
-            Section("Game") {
-                LabeledContent("Date", value: game.date, format: .dateTime.day().month().year())
-                LabeledContent("Opponent", value: game.opponent.name)
-                LabeledContent("Tournament", value: game.tournament?.name ?? "Standalone")
-                LabeledContent("Team", value: game.team.name)
+            Section {
+                VStack(alignment: .center, spacing: 6) {
+                    Text("\(game.team.name) vs \(game.opponent.name)")
+                        .font(.headline)
+                    // Scores derive from completed points in plan-points.md.
+                    // No points exist yet, so show 0 - 0.
+                    Text("0 - 0")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+                    Text("We started on \(game.startingPosition.displayName)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+            }
+            Section {
+                DisclosureGroup("Additional Info") {
+                    LabeledContent("Date", value: game.date, format: .dateTime.day().month().year())
+                    LabeledContent("Tournament", value: game.tournament?.name ?? "Standalone")
+                    LabeledContent("Team", value: game.team.name)
+                    LabeledContent("Target", value: "\(game.targetPoints)")
+                    LabeledContent("Starting Position", value: game.startingPosition.displayName)
+                    LabeledContent("Status", value: game.status.displayName)
+                }
+            }
+            Section("Event Log") {
+                Text("No events yet.")
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Game")

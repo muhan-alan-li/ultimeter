@@ -21,7 +21,10 @@ struct GameFormView: View {
     @State private var date: Date
     @State private var opponentName: String
     @State private var tournamentName: String
+    @State private var targetPoints: Int
+    @State private var startingPosition: StartingPosition
     @State private var saveFailed = false
+    @State private var setupErrorMessage: String?
 
     init(team: Team, game: Game? = nil) {
         self.team = team
@@ -29,6 +32,8 @@ struct GameFormView: View {
         _date = State(initialValue: game?.date ?? Date())
         _opponentName = State(initialValue: game?.opponent.name ?? "")
         _tournamentName = State(initialValue: game?.tournament?.name ?? "")
+        _targetPoints = State(initialValue: game?.targetPoints ?? 15)
+        _startingPosition = State(initialValue: game?.startingPosition ?? .offense)
     }
 
     private var trimmedOpponentName: String {
@@ -37,6 +42,12 @@ struct GameFormView: View {
 
     private var trimmedTournamentName: String {
         tournamentName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Setup controls stay enabled before the game starts only.
+    /// Date, opponent, and tournament remain editable at any time.
+    private var isSetupEditable: Bool {
+        game?.status ?? .scheduled == .scheduled
     }
 
     var body: some View {
@@ -49,6 +60,20 @@ struct GameFormView: View {
                         text: $opponentName,
                         values: allOpponents.map(\.name)
                     )
+                }
+                Section("Setup") {
+                    Picker("Target", selection: $targetPoints) {
+                        ForEach(Game.allowedTargets, id: \.self) { target in
+                            Text("\(target)").tag(target)
+                        }
+                    }
+                    .disabled(!isSetupEditable)
+                    Picker("Starting Position", selection: $startingPosition) {
+                        Text("Offense").tag(StartingPosition.offense)
+                        Text("Defense").tag(StartingPosition.defense)
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(!isSetupEditable)
                 }
                 Section("Tournament") {
                     SuggestingPicker(
@@ -77,6 +102,17 @@ struct GameFormView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("The game could not be saved. Try again.")
+            }
+            .alert(
+                "Invalid Setup",
+                isPresented: Binding(
+                    get: { setupErrorMessage != nil },
+                    set: { if !$0 { setupErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(setupErrorMessage ?? "Invalid setup.")
             }
         }
     }
@@ -114,8 +150,32 @@ struct GameFormView: View {
             game.date = date
             game.opponent = opponent
             game.tournament = tournament
+            if isSetupEditable {
+                do {
+                    try game.setTarget(targetPoints)
+                } catch {
+                    modelContext.rollback()
+                    setupErrorMessage = error.localizedDescription
+                    return
+                }
+                game.startingPosition = startingPosition
+            }
         } else {
-            let newGame = Game(date: date, team: team, opponent: opponent, tournament: tournament)
+            let newGame = Game(
+                date: date,
+                team: team,
+                opponent: opponent,
+                tournament: tournament,
+                targetPoints: targetPoints,
+                startingPosition: startingPosition,
+                status: .scheduled
+            )
+            do {
+                try newGame.setTarget(targetPoints)
+            } catch {
+                setupErrorMessage = error.localizedDescription
+                return
+            }
             modelContext.insert(newGame)
             team.games.append(newGame)
         }
