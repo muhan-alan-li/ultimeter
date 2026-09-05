@@ -91,19 +91,23 @@ struct GameFormView: View {
 }
 
 #Preview("New Game") {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     return GameFormView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
         .modelContainer(container)
 }
 
 #Preview("Edit Game") {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     let team = Team(name: "Example Team", division: .mixed)
     let game = Game(date: .now, team: team, opponent: Opponent(name: "Rivals"))
     return GameFormView(context: container.mainContext, team: team, game: game)

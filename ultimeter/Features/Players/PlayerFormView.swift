@@ -148,19 +148,23 @@ struct AddExistingPlayerView: View {
 }
 
 #Preview("New Player") {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     return PlayerFormView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
         .modelContainer(container)
 }
 
 #Preview("Add Existing Player") {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     return AddExistingPlayerView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
         .modelContainer(container)
 }

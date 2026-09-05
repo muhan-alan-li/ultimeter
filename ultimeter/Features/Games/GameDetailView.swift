@@ -19,26 +19,41 @@ struct GameDetailView: View {
 
     @State private var errorMessage: String?
 
+    private var showStartControl: Bool {
+        game.status == .scheduled && game.points.isEmpty
+    }
+
     var body: some View {
         List {
             Section {
                 VStack(alignment: .center, spacing: 6) {
                     Text("\(game.team.name) vs \(game.opponent.name)")
                         .font(.headline)
-                    // Scores derive from completed points in plan-points.md.
-                    // No points exist yet, so show 0 - 0.
-                    Text("0 - 0")
+                    Text("\(game.ourScore) - \(game.theirScore)")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .monospacedDigit()
+                    Text("Target \(game.targetPoints)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if let halfNumber = game.halfPointNumber {
+                        Text("Half at point \(halfNumber)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                     Text("We started on \(game.startingPosition.displayName)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if game.status == .ended {
+                        Text("Game over")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
-            if game.status == .scheduled {
+            if showStartControl {
                 Section {
                     Button {
                         startGame()
@@ -59,9 +74,8 @@ struct GameDetailView: View {
                     LabeledContent("Status", value: game.status.displayName)
                 }
             }
-            Section("Event Log") {
-                Text("No events yet.")
-                    .foregroundStyle(.secondary)
+            Section("Points") {
+                PointListView(game: game)
             }
         }
         .navigationTitle("Game")
@@ -86,10 +100,12 @@ struct GameDetailView: View {
 }
 
 #Preview {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     return NavigationStack {
         GameDetailView(context: container.mainContext, game: Game(
             date: .now,

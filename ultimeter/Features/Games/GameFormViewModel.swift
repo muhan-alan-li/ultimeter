@@ -66,7 +66,7 @@ final class GameFormViewModel {
 
     /// Setup controls stay enabled before the game starts only.
     var isSetupEditable: Bool {
-        game?.status ?? .scheduled == .scheduled
+        (game?.status ?? .scheduled) == .scheduled && (game?.points.isEmpty ?? true)
     }
 
     private func findOrCreateOpponent(_ name: String) throws -> Opponent {
@@ -98,7 +98,9 @@ final class GameFormViewModel {
         if let game {
             let isSetupChange = targetPoints != game.targetPoints || startingPosition != game.startingPosition
             if isSetupChange {
-                guard game.status == .scheduled else { throw GameFormError.alreadyStarted }
+                guard game.status == .scheduled && game.points.isEmpty else {
+                    throw GameFormError.alreadyStarted
+                }
             }
         }
         isSaving = true

@@ -1,27 +1,22 @@
 //
-//  GameDetailViewModel.swift
+//  PointDetailViewModel.swift
 //  ultimeter
 //
 
 import Foundation
 import SwiftData
 
-/// Errors thrown by the game detail screen.
-enum GameDetailError: Error, LocalizedError {
-    case notScheduled
+/// Errors thrown by the point detail screen.
+enum PointDetailError: Error, LocalizedError {
     case notLive
     case noActivePoint
     case multipleActivePoints
     case invalidPoint
     case detachedPoint
-    case alreadyStarted
-    case invalidTarget(Int)
     case saveFailed(underlying: Error)
 
     var errorDescription: String? {
         switch self {
-        case .notScheduled:
-            "The game is not scheduled. This action is not allowed."
         case .notLive:
             "The game is not live. This action is not allowed."
         case .noActivePoint:
@@ -32,20 +27,16 @@ enum GameDetailError: Error, LocalizedError {
             "This point cannot change in its current state."
         case .detachedPoint:
             "This point does not belong to this game."
-        case .alreadyStarted:
-            "The game already started. This action is not allowed."
-        case .invalidTarget(let target):
-            "Invalid target \(target). Choose 13, 15, 17, 19, or 21."
         case .saveFailed(let underlying):
-            "The game could not be updated. \(underlying.localizedDescription)"
+            "The point could not be updated. \(underlying.localizedDescription)"
         }
     }
 }
 
-/// View model for `GameDetailView`. Owns game start and point results.
+/// View model for `PointDetailView`. Owns point result entry.
 @Observable
 @MainActor
-final class GameDetailViewModel {
+final class PointDetailViewModel {
     private let context: ModelContext
     var isSaving = false
 
@@ -60,7 +51,7 @@ final class GameDetailViewModel {
             try context.save()
         } catch {
             context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
+            throw PointDetailError.saveFailed(underlying: error)
         }
     }
 
@@ -127,33 +118,14 @@ final class GameDetailViewModel {
         context.delete(point)
     }
 
-    func startGame(_ game: Game) throws {
-        guard game.status == .scheduled else { throw GameDetailError.notScheduled }
-        guard game.points.isEmpty else { throw GameDetailError.alreadyStarted }
-        guard Game.allowedTargets.contains(game.targetPoints) else {
-            throw GameDetailError.invalidTarget(game.targetPoints)
-        }
-        do {
-            _ = insertPoint(in: game, number: 1, side: game.startingPosition, status: .active)
-            game.status = .live
-            try save()
-        } catch let error as GameDetailError {
-            context.rollback()
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
-    }
-
     func completeActivePoint(_ game: Game, scoredBy: ScoringTeam) throws {
-        guard game.status == .live else { throw GameDetailError.notLive }
+        guard game.status == .live else { throw PointDetailError.notLive }
         let active = activePoints(in: game)
         guard active.count == 1, let point = active.first else {
-            if active.isEmpty { throw GameDetailError.noActivePoint }
-            throw GameDetailError.multipleActivePoints
+            if active.isEmpty { throw PointDetailError.noActivePoint }
+            throw PointDetailError.multipleActivePoints
         }
-        guard point.game === game else { throw GameDetailError.detachedPoint }
+        guard point.game === game else { throw PointDetailError.detachedPoint }
         do {
             point.scoredBy = scoredBy
             point.status = .complete
@@ -170,12 +142,12 @@ final class GameDetailViewModel {
             let side = sideForNextPoint(in: game, nextNumber: nextNumber)
             _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
             try save()
-        } catch let error as GameDetailError {
+        } catch let error as PointDetailError {
             context.rollback()
             throw error
         } catch {
             context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
+            throw PointDetailError.saveFailed(underlying: error)
         }
     }
 
@@ -206,12 +178,12 @@ final class GameDetailViewModel {
 
     func updatePointResult(_ game: Game, point: Point, scoredBy: ScoringTeam) throws {
         guard game.status == .live || game.status == .ended else {
-            throw GameDetailError.notLive
+            throw PointDetailError.notLive
         }
-        guard point.status == .complete else { throw GameDetailError.invalidPoint }
-        guard point.game === game else { throw GameDetailError.detachedPoint }
+        guard point.status == .complete else { throw PointDetailError.invalidPoint }
+        guard point.game === game else { throw PointDetailError.detachedPoint }
         guard game.points.contains(where: { $0 === point }) else {
-            throw GameDetailError.detachedPoint
+            throw PointDetailError.detachedPoint
         }
         if point.scoredBy == scoredBy { return }
         do {
@@ -227,12 +199,12 @@ final class GameDetailViewModel {
                 reopenEndedGame(game)
             }
             try save()
-        } catch let error as GameDetailError {
+        } catch let error as PointDetailError {
             context.rollback()
             throw error
         } catch {
             context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
+            throw PointDetailError.saveFailed(underlying: error)
         }
     }
 }

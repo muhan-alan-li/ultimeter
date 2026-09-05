@@ -134,10 +134,12 @@ struct TeamDetailView: View {
 }
 
 #Preview {
-    let container = try! ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+    guard let container = try? ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    )
+    ) else {
+        fatalError("Preview container failed")
+    }
     return NavigationStack {
         TeamDetailView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
     }
