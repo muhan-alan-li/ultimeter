@@ -8,24 +8,24 @@ import SwiftData
 
 /// A form for creating a new player and adding it to a team.
 struct PlayerFormView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     let team: Team
 
-    @State private var name: String = ""
-    @State private var gender: Gender = .nonBinary
-    @State private var saveFailed = false
+    @State private var viewModel: PlayerFormViewModel
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    init(context: ModelContext, team: Team) {
+        self.team = team
+        _viewModel = State(initialValue: PlayerFormViewModel(context: context, team: team))
     }
+
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Player") {
-                    TextField("Name", text: $name)
-                    Picker("Gender", selection: $gender) {
+                    TextField("Name", text: $viewModel.name)
+                    Picker("Gender", selection: $viewModel.gender) {
                         ForEach(Gender.allCases, id: \.self) { gender in
                             Text(gender.displayName).tag(gender)
                         }
@@ -44,25 +44,25 @@ struct PlayerFormView: View {
                     Button("Add") {
                         save()
                     }
-                    .disabled(trimmedName.isEmpty)
+                    .disabled(viewModel.trimmedName.isEmpty || viewModel.isSaving)
                 }
             }
-            .alert("Save Failed", isPresented: $saveFailed) {
+            .alert("Save Failed", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The player could not be saved. Try again.")
+                Text(errorMessage ?? "The player could not be saved. Try again.")
             }
         }
     }
 
     private func save() {
-        let player = Player(name: trimmedName, gender: gender)
-        team.players.append(player)
         do {
-            try modelContext.save()
+            try viewModel.savePlayer()
         } catch {
-            team.players.removeAll { $0 === player }
-            saveFailed = true
+            errorMessage = error.localizedDescription
             return
         }
         dismiss()
@@ -71,11 +71,19 @@ struct PlayerFormView: View {
 
 /// Lists players who are not on the team. Tapping one adds it to the team.
 struct AddExistingPlayerView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor(\Player.name, comparator: .localizedStandard)])
     private var allPlayers: [Player]
     let team: Team
+
+    @State private var viewModel: AddExistingPlayerViewModel
+
+    init(context: ModelContext, team: Team) {
+        self.team = team
+        _viewModel = State(initialValue: AddExistingPlayerViewModel(context: context))
+    }
+
+    @State private var errorMessage: String?
 
     private var availablePlayers: [Player] {
         allPlayers.filter { player in
@@ -104,6 +112,7 @@ struct AddExistingPlayerView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .disabled(viewModel.isSaving)
                     }
                 }
             }
@@ -116,15 +125,22 @@ struct AddExistingPlayerView: View {
                     }
                 }
             }
+            .alert("Add Failed", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "The player could not be added. Try again.")
+            }
         }
     }
 
     private func add(_ player: Player) {
-        team.players.append(player)
         do {
-            try modelContext.save()
+            try viewModel.add(player, to: team)
         } catch {
-            team.players.removeAll { $0 === player }
+            errorMessage = error.localizedDescription
             return
         }
         dismiss()
@@ -132,6 +148,19 @@ struct AddExistingPlayerView: View {
 }
 
 #Preview("New Player") {
-    PlayerFormView(team: Team(name: "Example Team", division: .mixed))
-        .modelContainer(for: [Team.self, Player.self], inMemory: true)
+    let container = try! ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+    )
+    return PlayerFormView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
+        .modelContainer(container)
+}
+
+#Preview("Add Existing Player") {
+    let container = try! ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+    )
+    return AddExistingPlayerView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
+        .modelContainer(container)
 }

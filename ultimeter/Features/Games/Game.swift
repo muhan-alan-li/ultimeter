@@ -36,21 +36,6 @@ enum StartingPosition: String, Codable {
     }
 }
 
-/// Errors thrown by game transitions.
-enum GameError: Error, LocalizedError {
-    case invalidTarget(Int)
-    case alreadyStarted
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidTarget(let target):
-            "Invalid target \(target). Choose 13, 15, 17, 19, or 21."
-        case .alreadyStarted:
-            "The game already started. Target changes are not allowed."
-        }
-    }
-}
-
 /// A single game played by a team.
 @Model
 final class Game {
@@ -82,16 +67,5 @@ final class Game {
         self.targetPoints = targetPoints
         self.startingPosition = startingPosition
         self.status = status
-    }
-
-    /// Set the static target before the game starts.
-    func setTarget(_ target: Int) throws {
-        guard Self.allowedTargets.contains(target) else {
-            throw GameError.invalidTarget(target)
-        }
-        guard status == .scheduled else {
-            throw GameError.alreadyStarted
-        }
-        targetPoints = target
     }
 }

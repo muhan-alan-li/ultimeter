@@ -14,12 +14,16 @@ struct TeamListView: View {
     @Query(sort: [SortDescriptor(\Team.name, comparator: .localizedStandard)])
     private var teams: [Team]
 
-    init() {}
+    @State private var viewModel: TeamListViewModel
+
+    init(context: ModelContext) {
+        _viewModel = State(initialValue: TeamListViewModel(context: context))
+    }
 
     @State private var showingCreateForm = false
     @State private var teamToEdit: Team?
     @State private var teamToDelete: Team?
-    @State private var deleteFailed = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -41,10 +45,10 @@ struct TeamListView: View {
                 }
             }
             .sheet(isPresented: $showingCreateForm) {
-                TeamFormView()
+                TeamFormView(context: modelContext)
             }
             .sheet(item: $teamToEdit) { team in
-                TeamFormView(team: team)
+                TeamFormView(context: modelContext, team: team)
             }
             .confirmationDialog(
                 "Delete \(teamToDelete?.name ?? "this team")?",
@@ -58,11 +62,15 @@ struct TeamListView: View {
                 Button("Delete Team", role: .destructive) {
                     delete(team)
                 }
+                .disabled(viewModel.isSaving)
             }
-            .alert("Delete Failed", isPresented: $deleteFailed) {
+            .alert("Delete Failed", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The team could not be deleted. Try again.")
+                Text(errorMessage ?? "The team could not be deleted. Try again.")
             }
         }
     }
@@ -84,7 +92,7 @@ struct TeamListView: View {
         List {
             ForEach(teams) { team in
                 NavigationLink {
-                    TeamDetailView(team: team)
+                    TeamDetailView(context: modelContext, team: team)
                 } label: {
                     TeamRowView(team: team)
                 }
@@ -107,12 +115,10 @@ struct TeamListView: View {
 
     private func delete(_ team: Team) {
         withAnimation {
-            modelContext.delete(team)
             do {
-                try modelContext.save()
+                try viewModel.deleteTeam(team)
             } catch {
-                modelContext.rollback()
-                deleteFailed = true
+                errorMessage = error.localizedDescription
             }
         }
     }
@@ -134,6 +140,10 @@ struct TeamRowView: View {
 }
 
 #Preview {
-    TeamListView()
-        .modelContainer(for: [Team.self, Player.self], inMemory: true)
+    let container = try! ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+    )
+    return TeamListView(context: container.mainContext)
+        .modelContainer(container)
 }

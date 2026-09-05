@@ -11,10 +11,17 @@ struct GameListView: View {
     @Environment(\.modelContext) private var modelContext
     let team: Team
 
+    @State private var viewModel: GameListViewModel
+
+    init(context: ModelContext, team: Team) {
+        self.team = team
+        _viewModel = State(initialValue: GameListViewModel(context: context))
+    }
+
     @State private var gameToEdit: Game?
     @State private var gameToDelete: Game?
     @State private var showingNewGame = false
-    @State private var deleteFailed = false
+    @State private var errorMessage: String?
 
     /// The team's games, newest first.
     private var games: [Game] {
@@ -56,10 +63,10 @@ struct GameListView: View {
             }
         }
         .sheet(isPresented: $showingNewGame) {
-            GameFormView(team: team)
+            GameFormView(context: modelContext, team: team)
         }
         .sheet(item: $gameToEdit) { game in
-            GameFormView(team: team, game: game)
+            GameFormView(context: modelContext, team: team, game: game)
         }
         .confirmationDialog(
             "Delete this game?",
@@ -74,11 +81,15 @@ struct GameListView: View {
                     delete(game)
                 }
             }
+            .disabled(viewModel.isSaving)
         }
-        .alert("Delete Failed", isPresented: $deleteFailed) {
+        .alert("Delete Failed", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("The game could not be deleted. Try again.")
+            Text(errorMessage ?? "The game could not be deleted. Try again.")
         }
     }
 
@@ -108,7 +119,7 @@ struct GameListView: View {
     private func gameRows(_ games: [Game]) -> some View {
         ForEach(games) { game in
             NavigationLink {
-                GameDetailView(game: game)
+                GameDetailView(context: modelContext, game: game)
             } label: {
                 GameRowView(game: game)
             }
@@ -130,12 +141,10 @@ struct GameListView: View {
 
     private func delete(_ game: Game) {
         withAnimation {
-            modelContext.delete(game)
             do {
-                try modelContext.save()
+                try viewModel.deleteGame(game)
             } catch {
-                modelContext.rollback()
-                deleteFailed = true
+                errorMessage = error.localizedDescription
             }
         }
     }
@@ -157,8 +166,12 @@ struct GameRowView: View {
 }
 
 #Preview {
-    NavigationStack {
-        GameListView(team: Team(name: "Example Team", division: .mixed))
+    let container = try! ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+    )
+    return NavigationStack {
+        GameListView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
     }
-    .modelContainer(for: [Team.self, Player.self, Game.self, Opponent.self, Tournament.self], inMemory: true)
+    .modelContainer(container)
 }

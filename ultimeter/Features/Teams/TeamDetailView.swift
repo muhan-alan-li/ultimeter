@@ -19,9 +19,17 @@ struct TeamDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let team: Team
 
+    @State private var viewModel: TeamDetailViewModel
+
+    init(context: ModelContext, team: Team) {
+        self.team = team
+        _viewModel = State(initialValue: TeamDetailViewModel(context: context))
+    }
+
     @State private var selectedTab: TeamDetailTab = .roster
     @State private var showingNewPlayer = false
     @State private var showingAddExisting = false
+    @State private var errorMessage: String?
 
     private var players: [Player] {
         team.players.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -42,7 +50,7 @@ struct TeamDetailView: View {
             case .roster:
                 rosterTab
             case .games:
-                GameListView(team: team)
+                GameListView(context: modelContext, team: team)
             }
         }
         .navigationTitle(team.name)
@@ -64,10 +72,18 @@ struct TeamDetailView: View {
             }
         }
         .sheet(isPresented: $showingNewPlayer) {
-            PlayerFormView(team: team)
+            PlayerFormView(context: modelContext, team: team)
         }
         .sheet(isPresented: $showingAddExisting) {
-            AddExistingPlayerView(team: team)
+            AddExistingPlayerView(context: modelContext, team: team)
+        }
+        .alert("Update Failed", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "The roster could not be updated. Try again.")
         }
     }
 
@@ -108,19 +124,22 @@ struct TeamDetailView: View {
 
     private func deletePlayers(at offsets: IndexSet) {
         for offset in offsets {
-            team.players.removeAll { $0 === players[offset] }
-        }
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
+            do {
+                try viewModel.removePlayer(players[offset], from: team)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
 
 #Preview {
-    NavigationStack {
-        TeamDetailView(team: Team(name: "Example Team", division: .mixed))
+    let container = try! ModelContainer(
+        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self]),
+        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+    )
+    return NavigationStack {
+        TeamDetailView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
     }
-    .modelContainer(for: [Team.self, Player.self, Game.self, Opponent.self, Tournament.self], inMemory: true)
+    .modelContainer(container)
 }
