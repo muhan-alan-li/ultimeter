@@ -45,7 +45,7 @@ struct UltimeterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TeamListView()
+            TeamListView(context: sharedModelContainer.mainContext)
         }
         .modelContainer(sharedModelContainer)
     }
