@@ -89,26 +89,14 @@ final class PointDetailViewModel {
     }
 
     private func insertPoint(in game: Game, number: Int, side: StartingPosition, status: PointStatus) -> Point {
-        let point = Point(
-            sequence: game.nextSequence,
-            number: number,
-            status: status,
-            startingPosition: side,
-            game: game
-        )
-        game.nextSequence += 1
+        let point = game.makePoint(number: number, side: side, status: status)
         context.insert(point)
         game.points.append(point)
         return point
     }
 
     private func insertHalftime(in game: Game, pointNumber: Int) {
-        let half = Halftime(
-            sequence: game.nextSequence,
-            pointNumber: pointNumber,
-            game: game
-        )
-        game.nextSequence += 1
+        let half = game.makeHalftime(pointNumber: pointNumber)
         context.insert(half)
         game.halftime = half
     }

@@ -9,11 +9,6 @@ import SwiftData
 /// Errors thrown by the game detail screen.
 enum GameDetailError: Error, LocalizedError {
     case notScheduled
-    case notLive
-    case noActivePoint
-    case multipleActivePoints
-    case invalidPoint
-    case detachedPoint
     case alreadyStarted
     case invalidTarget(Int)
     case saveFailed(underlying: Error)
@@ -22,16 +17,6 @@ enum GameDetailError: Error, LocalizedError {
         switch self {
         case .notScheduled:
             "The game is not scheduled. This action is not allowed."
-        case .notLive:
-            "The game is not live. This action is not allowed."
-        case .noActivePoint:
-            "There is no active point."
-        case .multipleActivePoints:
-            "There is more than one active point."
-        case .invalidPoint:
-            "This point cannot change in its current state."
-        case .detachedPoint:
-            "This point does not belong to this game."
         case .alreadyStarted:
             "The game already started. This action is not allowed."
         case .invalidTarget(let target):
@@ -42,7 +27,7 @@ enum GameDetailError: Error, LocalizedError {
     }
 }
 
-/// View model for `GameDetailView`. Owns game start and point results.
+/// View model for `GameDetailView`. Owns game start.
 @Observable
 @MainActor
 final class GameDetailViewModel {
@@ -64,69 +49,6 @@ final class GameDetailViewModel {
         }
     }
 
-    private func activePoints(in game: Game) -> [Point] {
-        game.points.filter { $0.status == .active }
-    }
-
-    private func maxCompletedNumber(in game: Game) -> Int? {
-        game.points.filter { $0.status == .complete }.map(\.number).max()
-    }
-
-    private func lastCompletedPoint(in game: Game) -> Point? {
-        game.points.filter { $0.status == .complete }.max { $0.number < $1.number }
-    }
-
-    private func opposite(of side: StartingPosition) -> StartingPosition {
-        side == .offense ? .defense : .offense
-    }
-
-    private func sideForNextPoint(in game: Game, nextNumber: Int) -> StartingPosition {
-        if let half = game.halftime, nextNumber == half.pointNumber {
-            return opposite(of: game.startingPosition)
-        }
-        guard let last = lastCompletedPoint(in: game) else {
-            return game.startingPosition
-        }
-        switch last.scoredBy {
-        case .us:
-            return .defense
-        case .them:
-            return .offense
-        case nil:
-            return game.startingPosition
-        }
-    }
-
-    private func insertPoint(in game: Game, number: Int, side: StartingPosition, status: PointStatus) -> Point {
-        let point = Point(
-            sequence: game.nextSequence,
-            number: number,
-            status: status,
-            startingPosition: side,
-            game: game
-        )
-        game.nextSequence += 1
-        context.insert(point)
-        game.points.append(point)
-        return point
-    }
-
-    private func insertHalftime(in game: Game, pointNumber: Int) {
-        let half = Halftime(
-            sequence: game.nextSequence,
-            pointNumber: pointNumber,
-            game: game
-        )
-        game.nextSequence += 1
-        context.insert(half)
-        game.halftime = half
-    }
-
-    private func deletePoint(_ point: Point, from game: Game) {
-        game.points.removeAll { $0 === point }
-        context.delete(point)
-    }
-
     func startGame(_ game: Game) throws {
         guard game.status == .scheduled else { throw GameDetailError.notScheduled }
         guard game.points.isEmpty else { throw GameDetailError.alreadyStarted }
@@ -134,98 +56,10 @@ final class GameDetailViewModel {
             throw GameDetailError.invalidTarget(game.targetPoints)
         }
         do {
-            _ = insertPoint(in: game, number: 1, side: game.startingPosition, status: .active)
+            let point = game.makePoint(number: 1, side: game.startingPosition, status: .active)
+            context.insert(point)
+            game.points.append(point)
             game.status = .live
-            try save()
-        } catch let error as GameDetailError {
-            context.rollback()
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
-    }
-
-    func completeActivePoint(_ game: Game, scoredBy: ScoringTeam) throws {
-        guard game.status == .live else { throw GameDetailError.notLive }
-        let active = activePoints(in: game)
-        guard active.count == 1, let point = active.first else {
-            if active.isEmpty { throw GameDetailError.noActivePoint }
-            throw GameDetailError.multipleActivePoints
-        }
-        guard point.game === game else { throw GameDetailError.detachedPoint }
-        do {
-            point.scoredBy = scoredBy
-            point.status = .complete
-            if game.ourScore >= game.targetPoints || game.theirScore >= game.targetPoints {
-                game.status = .ended
-                try save()
-                return
-            }
-            if game.halftime == nil
-                && (game.ourScore == game.halfTarget || game.theirScore == game.halfTarget) {
-                insertHalftime(in: game, pointNumber: point.number + 1)
-            }
-            let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-            let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-            _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
-            try save()
-        } catch let error as GameDetailError {
-            context.rollback()
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
-    }
-
-    private func insertHalftimeIfNeeded(in game: Game) {
-        guard game.halftime == nil else { return }
-        guard game.ourScore == game.halfTarget || game.theirScore == game.halfTarget else { return }
-        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-        insertHalftime(in: game, pointNumber: nextNumber)
-    }
-
-    private func reachedTarget(_ game: Game) -> Bool {
-        game.ourScore >= game.targetPoints || game.theirScore >= game.targetPoints
-    }
-
-    private func endLiveGame(_ game: Game) {
-        if let active = activePoints(in: game).first {
-            deletePoint(active, from: game)
-        }
-        game.status = .ended
-    }
-
-    private func reopenEndedGame(_ game: Game) {
-        game.status = .live
-        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-        let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-        _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
-    }
-
-    func updatePointResult(_ game: Game, point: Point, scoredBy: ScoringTeam) throws {
-        guard game.status == .live || game.status == .ended else {
-            throw GameDetailError.notLive
-        }
-        guard point.status == .complete else { throw GameDetailError.invalidPoint }
-        guard point.game === game else { throw GameDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw GameDetailError.detachedPoint
-        }
-        if point.scoredBy == scoredBy { return }
-        do {
-            point.scoredBy = scoredBy
-            insertHalftimeIfNeeded(in: game)
-            let done = reachedTarget(game)
-            if game.status == .live && done {
-                endLiveGame(game)
-                try save()
-                return
-            }
-            if game.status == .ended && !done {
-                reopenEndedGame(game)
-            }
             try save()
         } catch let error as GameDetailError {
             context.rollback()

@@ -111,4 +111,30 @@ final class Game {
     var halfTarget: Int {
         (targetPoints + 1) / 2
     }
+
+    /// Build the next point and advance the sequence counter.
+    /// Caller inserts the result into the context and appends it to `points`.
+    func makePoint(number: Int, side: StartingPosition, status: PointStatus) -> Point {
+        let point = Point(
+            sequence: nextSequence,
+            number: number,
+            status: status,
+            startingPosition: side,
+            game: self
+        )
+        nextSequence += 1
+        return point
+    }
+
+    /// Build the halftime marker and advance the sequence counter.
+    /// Caller inserts the result into the context and assigns it to `halftime`.
+    func makeHalftime(pointNumber: Int) -> Halftime {
+        let half = Halftime(
+            sequence: nextSequence,
+            pointNumber: pointNumber,
+            game: self
+        )
+        nextSequence += 1
+        return half
+    }
 }
