@@ -40,17 +40,22 @@ enum StartingPosition: String, Codable {
 @Model
 final class Game {
     var date: Date
+    var team: Team
     var opponent: Opponent
+    
     @Relationship(inverse: \Tournament.games)
     var tournament: Tournament?
-    var team: Team
+    
     var targetPoints: Int = 15
     var startingPosition: StartingPosition = StartingPosition.offense
     var status: GameStatus = GameStatus.scheduled
+    
     @Relationship(deleteRule: .cascade, inverse: \Point.game)
     var points: [Point] = []
+    
     @Relationship(deleteRule: .cascade, inverse: \Halftime.game)
     var halftime: Halftime?
+    
     var nextSequence: Int = 0
 
     /// The approved target values.
