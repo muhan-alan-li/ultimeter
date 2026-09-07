@@ -23,15 +23,12 @@ enum GameListError: Error, LocalizedError {
 @MainActor
 final class GameListViewModel {
     private let context: ModelContext
-    var isSaving = false
 
     init(context: ModelContext) {
         self.context = context
     }
 
     private func save() throws {
-        isSaving = true
-        defer { isSaving = false }
         do {
             try context.save()
         } catch {

@@ -30,7 +30,6 @@ final class PlayerFormViewModel {
 
     var name: String = ""
     var gender: Gender = .nonBinary
-    var isSaving = false
 
     init(context: ModelContext, team: Team) {
         self.context = context
@@ -42,8 +41,6 @@ final class PlayerFormViewModel {
     }
 
     private func save() throws {
-        isSaving = true
-        defer { isSaving = false }
         do {
             try context.save()
         } catch {

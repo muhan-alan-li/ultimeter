@@ -44,7 +44,7 @@ struct PlayerFormView: View {
                     Button("Add") {
                         save()
                     }
-                    .disabled(viewModel.trimmedName.isEmpty || viewModel.isSaving)
+                    .disabled(viewModel.trimmedName.isEmpty)
                 }
             }
             .alert("Save Failed", isPresented: Binding(
@@ -112,7 +112,6 @@ struct AddExistingPlayerView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .disabled(viewModel.isSaving)
                     }
                 }
             }

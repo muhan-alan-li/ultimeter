@@ -62,7 +62,6 @@ struct TeamListView: View {
                 Button("Delete Team", role: .destructive) {
                     delete(team)
                 }
-                .disabled(viewModel.isSaving)
             }
             .alert("Delete Failed", isPresented: Binding(
                 get: { errorMessage != nil },

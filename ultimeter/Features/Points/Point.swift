@@ -33,11 +33,6 @@ final class Point: GameEvent {
 
     var kind: GameEventKind { .point }
 
-    /// Convenience flag for our score.
-    var scoredByUs: Bool {
-        scoredBy == .us
-    }
-
     init(
         sequence: Int,
         number: Int,

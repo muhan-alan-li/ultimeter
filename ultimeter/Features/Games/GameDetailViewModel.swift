@@ -32,15 +32,12 @@ enum GameDetailError: Error, LocalizedError {
 @MainActor
 final class GameDetailViewModel {
     private let context: ModelContext
-    var isSaving = false
 
     init(context: ModelContext) {
         self.context = context
     }
 
     private func save() throws {
-        isSaving = true
-        defer { isSaving = false }
         do {
             try context.save()
         } catch {
@@ -62,7 +59,6 @@ final class GameDetailViewModel {
             game.status = .live
             try save()
         } catch let error as GameDetailError {
-            context.rollback()
             throw error
         } catch {
             context.rollback()

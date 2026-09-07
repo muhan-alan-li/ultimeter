@@ -33,7 +33,6 @@ final class TeamFormViewModel {
 
     var name: String
     var division: Division
-    var isSaving = false
 
     init(context: ModelContext, team: Team? = nil) {
         self.context = context
@@ -49,8 +48,6 @@ final class TeamFormViewModel {
     }
 
     private func save() throws {
-        isSaving = true
-        defer { isSaving = false }
         do {
             try context.save()
         } catch {

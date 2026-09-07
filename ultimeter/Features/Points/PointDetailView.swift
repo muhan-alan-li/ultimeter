@@ -54,7 +54,6 @@ struct PointDetailView: View {
                         }
                     }
                 }
-                .disabled(viewModel.isSaving)
                 Button {
                     recordScore(.them)
                 } label: {
@@ -66,7 +65,6 @@ struct PointDetailView: View {
                         }
                     }
                 }
-                .disabled(viewModel.isSaving)
             }
         }
         .navigationTitle("Point \(point.number)")

@@ -38,15 +38,12 @@ enum PointDetailError: Error, LocalizedError {
 @MainActor
 final class PointDetailViewModel {
     private let context: ModelContext
-    var isSaving = false
 
     init(context: ModelContext) {
         self.context = context
     }
 
     private func save() throws {
-        isSaving = true
-        defer { isSaving = false }
         do {
             try context.save()
         } catch {
@@ -131,7 +128,6 @@ final class PointDetailViewModel {
             _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
             try save()
         } catch let error as PointDetailError {
-            context.rollback()
             throw error
         } catch {
             context.rollback()
@@ -186,9 +182,11 @@ final class PointDetailViewModel {
             if game.status == .ended && !done {
                 reopenEndedGame(game)
             }
+            if let active = game.currentPoint {
+                active.startingPosition = sideForNextPoint(in: game, nextNumber: active.number)
+            }
             try save()
         } catch let error as PointDetailError {
-            context.rollback()
             throw error
         } catch {
             context.rollback()

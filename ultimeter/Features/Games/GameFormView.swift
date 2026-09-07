@@ -65,7 +65,7 @@ struct GameFormView: View {
                     Button("Save") {
                         save()
                     }
-                    .disabled(viewModel.trimmedOpponentName.isEmpty || viewModel.isSaving)
+                    .disabled(viewModel.trimmedOpponentName.isEmpty)
                 }
             }
             .alert("Save Failed", isPresented: Binding(

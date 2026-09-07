@@ -61,7 +61,6 @@ struct GameDetailView: View {
                         Text("Start Game")
                             .frame(maxWidth: .infinity)
                     }
-                    .disabled(viewModel.isSaving)
                 }
             }
             Section {

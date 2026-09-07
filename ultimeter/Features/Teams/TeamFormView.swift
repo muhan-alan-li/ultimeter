@@ -63,7 +63,7 @@ struct TeamFormView: View {
                     Button("Save") {
                         save()
                     }
-                    .disabled(viewModel.trimmedName.isEmpty || isDuplicateName || viewModel.isSaving)
+                    .disabled(viewModel.trimmedName.isEmpty || isDuplicateName)
                 }
             }
             .alert("Save Failed", isPresented: Binding(
