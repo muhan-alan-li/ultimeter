@@ -41,7 +41,6 @@ final class GameFormViewModel {
     var tournamentName: String
     var targetPoints: Int
     var startingPosition: StartingPosition
-    var isSaving = false
 
     init(context: ModelContext, team: Team, game: Game? = nil) {
         self.context = context
@@ -69,6 +68,10 @@ final class GameFormViewModel {
         (game?.status ?? .scheduled) == .scheduled && (game?.points.isEmpty ?? true)
     }
 
+    private func isSetupChange(_ game: Game) -> Bool {
+        targetPoints != game.targetPoints || startingPosition != game.startingPosition
+    }
+
     private func findOrCreateOpponent(_ name: String) throws -> Opponent {
         let all: [Opponent] = try context.fetch(FetchDescriptor<Opponent>())
         if let existing = all.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
@@ -79,9 +82,9 @@ final class GameFormViewModel {
         return opponent
     }
 
-    private func findOrCreateTournament(_ name: String) -> Tournament? {
+    private func findOrCreateTournament(_ name: String) throws -> Tournament? {
         guard !name.isEmpty else { return nil }
-        let all: [Tournament] = (try? context.fetch(FetchDescriptor<Tournament>())) ?? []
+        let all: [Tournament] = try context.fetch(FetchDescriptor<Tournament>())
         if let existing = all.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
             return existing
         }
@@ -95,24 +98,19 @@ final class GameFormViewModel {
         guard Game.allowedTargets.contains(targetPoints) else {
             throw GameFormError.invalidTarget(targetPoints)
         }
-        if let game {
-            let isSetupChange = targetPoints != game.targetPoints || startingPosition != game.startingPosition
-            if isSetupChange {
-                guard game.status == .scheduled && game.points.isEmpty else {
-                    throw GameFormError.alreadyStarted
-                }
+        if let game, isSetupChange(game) {
+            guard game.status == .scheduled && game.points.isEmpty else {
+                throw GameFormError.alreadyStarted
             }
         }
-        isSaving = true
-        defer { isSaving = false }
         do {
             let opponent = try findOrCreateOpponent(trimmedOpponentName)
-            let tournament = findOrCreateTournament(trimmedTournamentName)
+            let tournament = try findOrCreateTournament(trimmedTournamentName)
             if let game {
                 game.date = date
                 game.opponent = opponent
                 game.tournament = tournament
-                if targetPoints != game.targetPoints || startingPosition != game.startingPosition {
+                if isSetupChange(game) {
                     game.targetPoints = targetPoints
                     game.startingPosition = startingPosition
                 }
