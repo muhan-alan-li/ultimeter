@@ -30,12 +30,8 @@ struct GameListView: View {
 
     /// The games that belong to a tournament, keyed by tournament.
     private var tournamentSections: [(tournament: Tournament, games: [Game])] {
-        let grouped = Dictionary(grouping: games) { game in
-            game.tournament
-        }
-        return grouped
-            .filter { $0.key != nil }
-            .map { (tournament: $0.key!, games: $0.value) }
+        Dictionary(grouping: games) { $0.tournament }
+            .compactMap { key, value in key.map { (tournament: $0, games: value) } }
             .sorted { lhs, rhs in
                 lhs.tournament.name.localizedStandardCompare(rhs.tournament.name) == .orderedAscending
             }
@@ -47,7 +43,7 @@ struct GameListView: View {
 
     var body: some View {
         Group {
-            if games.isEmpty {
+            if team.games.isEmpty {
                 emptyState
             } else {
                 gameList
@@ -81,7 +77,6 @@ struct GameListView: View {
                     delete(game)
                 }
             }
-            .disabled(viewModel.isSaving)
         }
         .alert("Delete Failed", isPresented: Binding(
             get: { errorMessage != nil },
@@ -150,19 +145,111 @@ struct GameListView: View {
     }
 }
 
+/// The icon, color, and badge label for a game row.
+private struct RowStyle {
+    let icon: String
+    let color: Color
+    let label: String
+}
+
 /// A single row in the game list.
 struct GameRowView: View {
     let game: Game
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("vs \(game.opponent.name)")
-                .font(.headline)
-            Text(game.date, format: .dateTime.day().month().year())
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    private var isLive: Bool { game.status == .live }
+    private var isEnded: Bool { game.status == .ended }
+    private var showScore: Bool { isLive || isEnded }
+
+    /// Single source for the row's icon, color, and badge label.
+    private var style: RowStyle {
+        switch game.status {
+        case .live:
+            return RowStyle(icon: "dot.radiowaves.left.and.right", color: .blue, label: "Live")
+        case .scheduled:
+            return RowStyle(icon: "calendar", color: .secondary, label: "Scheduled")
+        case .ended:
+            let ourScore = game.ourScore
+            let theirScore = game.theirScore
+            if ourScore > theirScore {
+                return RowStyle(icon: "trophy.fill", color: .green, label: "W")
+            } else if ourScore < theirScore {
+                return RowStyle(icon: "xmark.circle.fill", color: .red, label: "L")
+            } else {
+                return RowStyle(icon: "equal.circle.fill", color: .secondary, label: "T")
+            }
         }
     }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: style.icon)
+                .foregroundStyle(style.color)
+                .font(.title3)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(game.team.name) vs \(game.opponent.name)")
+                    .font(.headline)
+                Text(game.date, format: .dateTime.day().month().year())
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                if showScore {
+                    Text("\(game.ourScore) - \(game.theirScore)")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+                        .foregroundStyle(isEnded ? style.color : .primary)
+                }
+                Text(style.label)
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(style.color, in: Capsule())
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        let base = "\(game.team.name) versus \(game.opponent.name)"
+        if isLive {
+            return "\(base), live, current score \(game.ourScore) to \(game.theirScore)"
+        }
+        if isEnded {
+            return "\(base), \(style.label), final score \(game.ourScore) to \(game.theirScore)"
+        }
+        return "\(base), scheduled"
+    }
+}
+
+#Preview("GameRow states") {
+    let team = Team(name: "Example Team", division: .mixed)
+    let opponent = Opponent(name: "Rivals")
+    func scoredPoints(won: Int, lost: Int) -> [Point] {
+        var result: [Point] = []
+        for index in 0..<(won + lost) {
+            result.append(Point(
+                sequence: index,
+                number: index + 1,
+                status: .complete,
+                startingPosition: .offense,
+                scoredBy: index < won ? .us : .them
+            ))
+        }
+        return result
+    }
+    let rows = [
+        Game(date: .now, team: team, opponent: opponent, status: .scheduled),
+        Game(date: .now, team: team, opponent: opponent, status: .live, points: scoredPoints(won: 8, lost: 5)),
+        Game(date: .now, team: team, opponent: opponent, status: .ended, points: scoredPoints(won: 15, lost: 12)),
+        Game(date: .now, team: team, opponent: opponent, status: .ended, points: scoredPoints(won: 9, lost: 15))
+    ]
+    return List { ForEach(rows) { GameRowView(game: $0) } }
 }
 
 #Preview {
