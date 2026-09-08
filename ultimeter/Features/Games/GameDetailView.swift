@@ -18,9 +18,16 @@ struct GameDetailView: View {
     }
 
     @State private var errorMessage: String?
+    @State private var showingEndGame = false
+    @State private var endOurScore = 0
+    @State private var endTheirScore = 0
 
     private var showStartControl: Bool {
         game.status == .scheduled && game.points.isEmpty
+    }
+
+    private var showEndControl: Bool {
+        game.status == .live
     }
 
     var body: some View {
@@ -63,6 +70,18 @@ struct GameDetailView: View {
                     }
                 }
             }
+            if showEndControl {
+                Section {
+                    Button(role: .destructive) {
+                        endOurScore = game.ourScore
+                        endTheirScore = game.theirScore
+                        showingEndGame = true
+                    } label: {
+                        Text("End Game")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
             Section {
                 DisclosureGroup("Additional Info") {
                     LabeledContent("Date", value: game.date, format: .dateTime.day().month().year())
@@ -79,6 +98,39 @@ struct GameDetailView: View {
         }
         .navigationTitle("Game")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingEndGame) {
+            NavigationStack {
+                Form {
+                    Section("Current Score") {
+                        Text("\(game.ourScore) - \(game.theirScore)")
+                            .monospacedDigit()
+                    }
+                    Section("Final Score") {
+                        Stepper("\(game.team.name): \(endOurScore)", value: $endOurScore, in: 0 ... 99)
+                        Stepper("\(game.opponent.name): \(endTheirScore)", value: $endTheirScore, in: 0 ... 99)
+                    }
+                    Section {
+                        Text("Keep the scores to end with the current result. Change them to rebuild points for a new final score.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .navigationTitle("End Game")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            showingEndGame = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("End Game") {
+                            endGame()
+                        }
+                    }
+                }
+            }
+        }
         .alert("Update Failed", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -92,6 +144,15 @@ struct GameDetailView: View {
     private func startGame() {
         do {
             try viewModel.startGame(game)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func endGame() {
+        do {
+            try viewModel.endGame(game, ourScore: endOurScore, theirScore: endTheirScore)
+            showingEndGame = false
         } catch {
             errorMessage = error.localizedDescription
         }
