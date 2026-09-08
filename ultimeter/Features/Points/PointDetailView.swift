@@ -8,6 +8,7 @@ import SwiftData
 
 /// Detail for one point. Records or edits its result.
 struct PointDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let game: Game
     let point: Point
 
@@ -22,8 +23,8 @@ struct PointDetailView: View {
 
     private var resultText: String {
         switch point.scoredBy {
-        case .us: "Us"
-        case .them: "Them"
+        case .us: ScoringTeam.us.teamName(in: game)
+        case .them: ScoringTeam.them.teamName(in: game)
         case nil: "No result yet"
         }
     }
@@ -47,7 +48,7 @@ struct PointDetailView: View {
                     recordScore(.us)
                 } label: {
                     HStack {
-                        Text("We Score")
+                        Text("\(game.team.name) scores")
                         Spacer()
                         if point.scoredBy == .us {
                             Image(systemName: "checkmark")
@@ -58,7 +59,7 @@ struct PointDetailView: View {
                     recordScore(.them)
                 } label: {
                     HStack {
-                        Text("They Score")
+                        Text("\(game.opponent.name) scores")
                         Spacer()
                         if point.scoredBy == .them {
                             Image(systemName: "checkmark")
@@ -86,6 +87,7 @@ struct PointDetailView: View {
             } else {
                 try viewModel.updatePointResult(game, point: point, scoredBy: team)
             }
+            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -17,6 +17,14 @@ enum ScoringTeam: String, Codable {
     // swiftlint:disable:next identifier_name - plan-points.md requires `us`/`them`.
     case us
     case them
+
+    /// The name of the scoring team in this game.
+    func teamName(in game: Game) -> String {
+        switch self {
+        case .us: game.team.name
+        case .them: game.opponent.name
+        }
+    }
 }
 
 /// One played point. A game event.
