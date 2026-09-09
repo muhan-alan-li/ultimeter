@@ -32,11 +32,7 @@ struct GameFormView: View {
                     )
                 }
                 Section("Setup") {
-                    Picker("Target", selection: $viewModel.targetPoints) {
-                        ForEach(Game.allowedTargets, id: \.self) { target in
-                            Text("\(target)").tag(target)
-                        }
-                    }
+                    Stepper("Target: \(viewModel.targetPoints)", value: $viewModel.targetPoints, in: Game.validTargetRange)
                     .disabled(!viewModel.isSetupEditable)
                     Picker("Starting Position", selection: $viewModel.startingPosition) {
                         Text("Offense").tag(StartingPosition.offense)

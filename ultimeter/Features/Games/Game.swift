@@ -58,8 +58,7 @@ final class Game {
     
     var nextSequence: Int = 0
 
-    /// The approved target values.
-    static let allowedTargets = [13, 15, 17, 19, 21]
+    static let validTargetRange = 1 ... 21
 
     init(
         date: Date,

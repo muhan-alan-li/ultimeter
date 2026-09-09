@@ -26,7 +26,7 @@ enum GameDetailError: Error, LocalizedError {
         case .invalidScore:
             "Invalid score. Scores must be zero or higher."
         case .invalidTarget(let target):
-            "Invalid target \(target). Choose 13, 15, 17, 19, or 21."
+            "Invalid target \(target). Choose a value from 1 to 21."
         case .saveFailed(let underlying):
             "The game could not be updated. \(underlying.localizedDescription)"
         }
@@ -55,7 +55,7 @@ final class GameDetailViewModel {
     func startGame(_ game: Game) throws {
         guard game.status == .scheduled else { throw GameDetailError.notScheduled }
         guard game.points.isEmpty else { throw GameDetailError.alreadyStarted }
-        guard Game.allowedTargets.contains(game.targetPoints) else {
+        guard Game.validTargetRange.contains(game.targetPoints) else {
             throw GameDetailError.invalidTarget(game.targetPoints)
         }
         do {
@@ -63,6 +63,23 @@ final class GameDetailViewModel {
             context.insert(point)
             game.points.append(point)
             game.status = .live
+            try save()
+        } catch let error as GameDetailError {
+            throw error
+        } catch {
+            context.rollback()
+            throw GameDetailError.saveFailed(underlying: error)
+        }
+    }
+
+    func setPointCap(_ game: Game, to newCap: Int) throws {
+        guard game.status == .live else { throw GameDetailError.notLive }
+        let minimum = max(game.ourScore, game.theirScore) + 1
+        guard (minimum ... Game.validTargetRange.upperBound).contains(newCap) else {
+            throw GameDetailError.invalidTarget(newCap)
+        }
+        do {
+            game.targetPoints = newCap
             try save()
         } catch let error as GameDetailError {
             throw error

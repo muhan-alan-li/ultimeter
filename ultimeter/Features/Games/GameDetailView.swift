@@ -21,6 +21,8 @@ struct GameDetailView: View {
     @State private var showingEndGame = false
     @State private var endOurScore = 0
     @State private var endTheirScore = 0
+    @State private var showingCapSheet = false
+    @State private var newCap = 15
 
     private var showStartControl: Bool {
         game.status == .scheduled && game.points.isEmpty
@@ -28,6 +30,14 @@ struct GameDetailView: View {
 
     private var showEndControl: Bool {
         game.status == .live
+    }
+
+    private var capLowerBound: Int {
+        max(game.ourScore, game.theirScore) + 1
+    }
+
+    private var showCapControl: Bool {
+        showEndControl && capLowerBound <= Game.validTargetRange.upperBound
     }
 
     var body: some View {
@@ -72,6 +82,15 @@ struct GameDetailView: View {
             }
             if showEndControl {
                 Section {
+                    if showCapControl {
+                        Button {
+                            newCap = min(max(game.targetPoints, capLowerBound), Game.validTargetRange.upperBound)
+                            showingCapSheet = true
+                        } label: {
+                            Text("Set Cap")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
                     Button(role: .destructive) {
                         endOurScore = game.ourScore
                         endTheirScore = game.theirScore
@@ -131,6 +150,33 @@ struct GameDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingCapSheet) {
+            NavigationStack {
+                Form {
+                    Section("Current Score") {
+                        Text("\(game.ourScore) - \(game.theirScore)")
+                            .monospacedDigit()
+                    }
+                    Section("Point Cap") {
+                        Stepper("Point cap: \(newCap)", value: $newCap, in: capLowerBound ... Game.validTargetRange.upperBound)
+                    }
+                }
+                .navigationTitle("Set Cap")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            showingCapSheet = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            saveCap()
+                        }
+                    }
+                }
+            }
+        }
         .alert("Update Failed", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -153,6 +199,15 @@ struct GameDetailView: View {
         do {
             try viewModel.endGame(game, ourScore: endOurScore, theirScore: endTheirScore)
             showingEndGame = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveCap() {
+        do {
+            try viewModel.setPointCap(game, to: newCap)
+            showingCapSheet = false
         } catch {
             errorMessage = error.localizedDescription
         }

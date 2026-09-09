@@ -18,7 +18,7 @@ enum GameFormError: Error, LocalizedError {
         case .emptyOpponentName:
             "Opponent name cannot be empty."
         case .invalidTarget(let target):
-            "Invalid target \(target). Choose 13, 15, 17, 19, or 21."
+            "Invalid target \(target). Choose a value from 1 to 21."
         case .alreadyStarted:
             "The game already started. Target changes are not allowed."
         case .saveFailed(let underlying):
@@ -95,7 +95,7 @@ final class GameFormViewModel {
 
     func saveGame() throws {
         guard !trimmedOpponentName.isEmpty else { throw GameFormError.emptyOpponentName }
-        guard Game.allowedTargets.contains(targetPoints) else {
+        guard Game.validTargetRange.contains(targetPoints) else {
             throw GameFormError.invalidTarget(targetPoints)
         }
         if let game, isSetupChange(game) {
