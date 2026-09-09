@@ -22,25 +22,31 @@ struct PointDetailView: View {
     }
 
     private var resultText: String {
-        switch point.scoredBy {
-        case .us: ScoringTeam.us.teamName(in: game)
-        case .them: ScoringTeam.them.teamName(in: game)
-        case nil: "No result yet"
+        if let outcome = point.outcome {
+            outcome.label
+        } else if let scoredBy = point.scoredBy {
+            scoredBy.teamName(in: game)
+        } else {
+            "No result yet"
         }
     }
 
     var body: some View {
         List {
             Section("Point") {
-                LabeledContent("Number", value: "\(point.number)")
-                LabeledContent(
-                    "Side",
-                    value: point.startingPosition == .offense ? "Offense" : "Defense"
-                )
-                LabeledContent(
-                    "Status",
-                    value: point.status == .active ? "Active" : "Complete"
-                )
+                if point.status == .complete, let outcome = point.outcome {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(outcome.label)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(point.scoredBy == .us ? .green : .red)
+                            Text("Started on \(point.startingPosition == .offense ? "offense" : "defense")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 LabeledContent("Result", value: resultText)
             }
             Section("Result") {

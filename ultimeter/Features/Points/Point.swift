@@ -12,6 +12,28 @@ enum PointStatus: String, Codable {
     case complete
 }
 
+/// The result of a completed point from our perspective.
+enum PointOutcome {
+    /// We started on offense and scored.
+    case weHold
+    /// We started on defense and scored.
+    case weBreak
+    /// The opponent started on offense and scored.
+    case theyHold
+    /// The opponent started on defense and scored.
+    case theyBreak
+
+    /// The display label for this outcome.
+    var label: String {
+        switch self {
+            case .weHold: "We hold"
+            case .weBreak: "We break"
+            case .theyHold: "They hold"
+            case .theyBreak: "They break"
+        }
+    }
+}
+
 /// The team that won a point.
 enum ScoringTeam: String, Codable {
     // swiftlint:disable:next identifier_name - plan-points.md requires `us`/`them`.
@@ -40,6 +62,21 @@ final class Point: GameEvent {
     var game: Game?
 
     var kind: GameEventKind { .point }
+
+    /// The outcome of this point, if it is complete.
+    var outcome: PointOutcome? {
+        guard status == .complete, let scoredBy else { return nil }
+        switch (startingPosition, scoredBy) {
+            case (.offense, .us):
+                return .weHold
+            case (.defense, .us):
+                return .weBreak
+            case (.offense, .them):
+                return .theyBreak
+            case (.defense, .them):
+                return .theyHold
+        }
+    }
 
     init(
         sequence: Int,

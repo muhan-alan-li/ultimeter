@@ -65,25 +65,14 @@ struct PointListView: View {
         return first < halfNumber && last >= halfNumber
     }
 
-    private func rowTint(for point: Point) -> Color? {
-        if point.status == .active {
-            return .blue.opacity(0.15)
-        }
-        switch point.scoredBy {
-        case .us: return .green.opacity(0.15)
-        case .them: return .red.opacity(0.15)
-        case nil: return nil
-        }
-    }
-
     private func accessibilityText(for row: RowScore) -> String {
         let side = row.point.startingPosition == .offense ? "offense" : "defense"
         let score = "\(row.ourTotal) to \(row.theirTotal)"
         if row.point.status == .active {
             return "Point \(row.point.number), \(side), live, score \(score)"
         }
-        if let scoredBy = row.point.scoredBy {
-            return "Point \(row.point.number), \(side), won by \(scoredBy.teamName(in: game)), score \(score)"
+        if let outcome = row.point.outcome {
+            return "Point \(row.point.number), \(side), \(outcome.label), score \(score)"
         }
         return "Point \(row.point.number), \(side), no result, score \(score)"
     }
@@ -147,14 +136,16 @@ struct PointListView: View {
         NavigationLink {
             PointDetailView(context: modelContext, game: game, point: row.point)
         } label: {
-            HStack {
-                Text("\(row.point.number)")
-                    .font(.headline)
-                    .frame(width: 28, alignment: .leading)
+            HStack(spacing: 12) {
                 Text(row.point.startingPosition == .offense ? "O" : "D")
-                    .font(.subheadline)
+                    .font(.headline)
                     .foregroundStyle(.secondary)
-                    .frame(width: 20)
+                if let outcome = row.point.outcome {
+                    Text(outcome.label)
+                        .font(.subheadline)
+                        .foregroundStyle(row.point.scoredBy == .us ? .green : .red)
+                        .fontWeight(.medium)
+                }
                 Spacer()
                 Text("\(row.ourTotal) - \(row.theirTotal)")
                     .monospacedDigit()
@@ -172,6 +163,5 @@ struct PointListView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityText(for: row))
         }
-        .listRowBackground(rowTint(for: row.point))
     }
 }
