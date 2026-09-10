@@ -59,6 +59,7 @@ final class GameDetailViewModel {
             throw GameDetailError.invalidTarget(game.targetPoints)
         }
         do {
+            game.halftimeTarget = (game.targetPoints + 1) / 2
             let point = game.makePoint(number: 1, side: game.startingPosition, status: .active)
             context.insert(point)
             game.points.append(point)

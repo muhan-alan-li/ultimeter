@@ -49,6 +49,9 @@ final class Game {
     var targetPoints: Int = 15
     var startingPosition: StartingPosition = StartingPosition.offense
     var status: GameStatus = GameStatus.scheduled
+
+    /// Score that triggers halftime. Frozen at game start so cap changes never move it.
+    var halftimeTarget: Int?
     
     @Relationship(deleteRule: .cascade, inverse: \Point.game)
     var points: [Point] = []
@@ -68,6 +71,7 @@ final class Game {
         targetPoints: Int = 15,
         startingPosition: StartingPosition = .offense,
         status: GameStatus = .scheduled,
+        halftimeTarget: Int? = nil,
         points: [Point] = [],
         halftime: Halftime? = nil,
         nextSequence: Int = 0
@@ -79,6 +83,7 @@ final class Game {
         self.targetPoints = targetPoints
         self.startingPosition = startingPosition
         self.status = status
+        self.halftimeTarget = halftimeTarget
         self.points = points
         self.halftime = halftime
         self.nextSequence = nextSequence
@@ -112,8 +117,9 @@ final class Game {
     }
 
     /// Half target with integer division.
+    /// Uses the frozen start-of-game value so cap changes never move halftime.
     var halfTarget: Int {
-        (targetPoints + 1) / 2
+        halftimeTarget ?? (targetPoints + 1) / 2
     }
 
     /// Build the next point and advance the sequence counter.

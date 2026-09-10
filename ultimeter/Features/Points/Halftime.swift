@@ -6,16 +6,14 @@
 import Foundation
 import SwiftData
 
-/// The halftime marker. A game event.
+/// The halftime marker.
 /// Records the split between the two halves.
 @Model
-final class Halftime: GameEvent {
+final class Halftime {
     var sequence: Int
     var pointNumber: Int
     var createdAt: Date
     var game: Game?
-
-    var kind: GameEventKind { .halftime }
 
     init(
         sequence: Int,

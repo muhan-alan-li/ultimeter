@@ -49,10 +49,10 @@ enum ScoringTeam: String, Codable {
     }
 }
 
-/// One played point. A game event.
+/// One played point.
 /// Stores only data for one point.
 @Model
-final class Point: GameEvent {
+final class Point {
     var sequence: Int
     var number: Int
     var status: PointStatus
@@ -60,8 +60,6 @@ final class Point: GameEvent {
     var scoredBy: ScoringTeam?
     var createdAt: Date
     var game: Game?
-
-    var kind: GameEventKind { .point }
 
     /// The outcome of this point, if it is complete.
     var outcome: PointOutcome? {
