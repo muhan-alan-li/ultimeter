@@ -12,6 +12,7 @@ enum GameDetailError: Error, LocalizedError {
     case alreadyStarted
     case notLive
     case invalidScore
+    case finalScoreBelowCurrent
     case invalidTarget(Int)
     case saveFailed(underlying: Error)
 
@@ -25,6 +26,8 @@ enum GameDetailError: Error, LocalizedError {
             "The game is not live. This action is not allowed."
         case .invalidScore:
             "Invalid score. Scores must be zero or higher."
+        case .finalScoreBelowCurrent:
+            "Invalid final score. Final score cannot be below the current score."
         case .invalidTarget(let target):
             "Invalid target \(target). Choose a value from 1 to 21."
         case .saveFailed(let underlying):
@@ -93,35 +96,31 @@ final class GameDetailViewModel {
     func endGame(_ game: Game, ourScore: Int, theirScore: Int) throws {
         guard game.status == .live else { throw GameDetailError.notLive }
         guard ourScore >= 0 && theirScore >= 0 else { throw GameDetailError.invalidScore }
+        guard ourScore >= game.ourScore && theirScore >= game.theirScore else {
+            throw GameDetailError.finalScoreBelowCurrent
+        }
         do {
+            if let active = game.points.first(where: { $0.status == .active }) {
+                game.points.removeAll { $0 === active }
+                context.delete(active)
+            }
             if ourScore == game.ourScore && theirScore == game.theirScore {
-                if let active = game.points.first(where: { $0.status == .active }) {
-                    game.points.removeAll { $0 === active }
-                    context.delete(active)
-                }
                 game.status = .ended
                 try save()
                 return
             }
-            for point in game.points {
-                context.delete(point)
-            }
-            game.points.removeAll()
-            if let half = game.halftime {
-                context.delete(half)
-                game.halftime = nil
-            }
-            game.nextSequence = 0
-            var number = 1
-            for _ in 0 ..< ourScore {
-                let point = game.makePoint(number: number, side: game.startingPosition, status: .complete)
+            let additionalUs = ourScore - game.ourScore
+            let additionalThem = theirScore - game.theirScore
+            var number = (game.points.filter { $0.status == .complete }.map(\.number).max() ?? 0) + 1
+            for _ in 0 ..< additionalUs {
+                let point = game.makePoint(number: number, side: sideForNextPoint(in: game), status: .complete)
                 point.scoredBy = .us
                 context.insert(point)
                 game.points.append(point)
                 number += 1
             }
-            for _ in 0 ..< theirScore {
-                let point = game.makePoint(number: number, side: game.startingPosition, status: .complete)
+            for _ in 0 ..< additionalThem {
+                let point = game.makePoint(number: number, side: sideForNextPoint(in: game), status: .complete)
                 point.scoredBy = .them
                 context.insert(point)
                 game.points.append(point)
@@ -135,5 +134,19 @@ final class GameDetailViewModel {
             context.rollback()
             throw GameDetailError.saveFailed(underlying: error)
         }
+    }
+
+    private func sideForNextPoint(in game: Game) -> StartingPosition {
+        if let last = game.points.filter({ $0.status == .complete }).max(by: { $0.number < $1.number }) {
+            switch last.scoredBy {
+            case .us:
+                return .defense
+            case .them:
+                return .offense
+            case nil:
+                return game.startingPosition
+            }
+        }
+        return game.startingPosition
     }
 }

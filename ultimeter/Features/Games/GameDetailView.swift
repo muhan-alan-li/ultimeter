@@ -129,7 +129,7 @@ struct GameDetailView: View {
                         Stepper("\(game.opponent.name): \(endTheirScore)", value: $endTheirScore, in: 0 ... 99)
                     }
                     Section {
-                        Text("Keep the scores to end with the current result. Change them to rebuild points for a new final score.")
+                        Text("Keep the scores to end with the current result. Increase them to add missing points for a new final score.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
