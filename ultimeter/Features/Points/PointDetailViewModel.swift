@@ -124,6 +124,10 @@ final class PointDetailViewModel {
             throw PointDetailError.detachedPoint
         }
         guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
+        let actives = activePoints(in: game)
+        guard actives.isEmpty else { throw PointDetailError.multipleActivePoints }
+        let opens = openPoints(in: game)
+        guard opens.count == 1, opens.first === point else { throw PointDetailError.invalidPoint }
         guard point.line.count == PointLineViewModel.maxLineSize else {
             throw PointDetailError.lineIncomplete(
                 current: point.line.count,
@@ -170,9 +174,16 @@ final class PointDetailViewModel {
             throw PointDetailError.multipleActivePoints
         }
         guard point.game === game else { throw PointDetailError.detachedPoint }
+        guard point.line.count == PointLineViewModel.maxLineSize else {
+            throw PointDetailError.lineIncomplete(
+                current: point.line.count,
+                required: PointLineViewModel.maxLineSize
+            )
+        }
         do {
             point.scoredBy = scoredBy
             point.status = .complete
+            point.lineLocked = true
             if game.ourScore >= game.targetPoints || game.theirScore >= game.targetPoints {
                 game.status = .ended
                 try save()
@@ -206,7 +217,7 @@ final class PointDetailViewModel {
     }
 
     private func endLiveGame(_ game: Game) {
-        if let open = openPoints(in: game).first {
+        for open in openPoints(in: game) {
             deletePoint(open, from: game)
         }
         game.status = .ended

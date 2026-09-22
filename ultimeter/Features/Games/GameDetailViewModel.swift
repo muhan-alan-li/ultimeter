@@ -100,7 +100,8 @@ final class GameDetailViewModel {
             throw GameDetailError.finalScoreBelowCurrent
         }
         do {
-            if let open = game.points.first(where: { $0.status != .complete }) {
+            let opens = game.points.filter { $0.status != .complete }
+            for open in opens {
                 game.points.removeAll { $0 === open }
                 context.delete(open)
             }

@@ -88,11 +88,25 @@ final class PointLineViewModel {
             throw PointLineError.lineFull
         }
         point.line.append(player)
+        if point.status == .active, point.line.count == Self.maxLineSize {
+            point.lineLocked = true
+        }
         try save()
     }
 
     /// Drop line players who left the team. Call when opening an editable point.
+    /// Active locked lines are pruned too. A removal unlocks the line for a sub.
     func pruneMissing(from point: Point, for game: Game) throws {
+        if point.status == .active, point.lineLocked {
+            let before = point.line.count
+            point.line.removeAll { lined in
+                !game.team.players.contains { $0 === lined }
+            }
+            guard point.line.count != before else { return }
+            point.lineLocked = false
+            try save()
+            return
+        }
         guard isLineEditable(point) else { return }
         let before = point.line.count
         point.line.removeAll { lined in

@@ -73,8 +73,22 @@ struct PointDetailView: View {
         lineViewModel.isLineEditable(point)
     }
 
-    private var canScore: Bool {
+    private var showResult: Bool {
         point.status == .active || point.status == .complete
+    }
+
+    private var canScore: Bool {
+        if point.status == .complete { return true }
+        if point.status == .active {
+            return point.line.count == PointLineViewModel.maxLineSize
+        }
+        return false
+    }
+
+    private var lineIncompleteText: String? {
+        guard point.status == .active else { return nil }
+        guard point.line.count != PointLineViewModel.maxLineSize else { return nil }
+        return "Line has \(point.line.count) of \(PointLineViewModel.maxLineSize). Complete the sub to continue."
     }
 
     var body: some View {
@@ -202,8 +216,13 @@ struct PointDetailView: View {
                     .disabled(!canPull)
                 }
             }
-            if canScore {
+            if showResult {
                 Section("Result") {
+                    if let lineIncompleteText {
+                        Text(lineIncompleteText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     Button {
                         recordScore(.us)
                     } label: {
@@ -215,6 +234,7 @@ struct PointDetailView: View {
                             }
                         }
                     }
+                    .disabled(!canScore)
                     Button {
                         recordScore(.them)
                     } label: {
@@ -226,6 +246,7 @@ struct PointDetailView: View {
                             }
                         }
                     }
+                    .disabled(!canScore)
                 }
             }
         }
