@@ -60,6 +60,7 @@ final class Point {
     var scoredBy: ScoringTeam?
     var createdAt: Date
     var game: Game?
+    var line: [Player] = []
 
     /// The outcome of this point, if it is complete.
     var outcome: PointOutcome? {
