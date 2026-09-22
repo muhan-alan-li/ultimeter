@@ -68,6 +68,9 @@ struct PointListView: View {
     private func accessibilityText(for row: RowScore) -> String {
         let side = row.point.startingPosition == .offense ? "offense" : "defense"
         let score = "\(row.ourTotal) to \(row.theirTotal)"
+        if row.point.status == .scheduled {
+            return "Point \(row.point.number), \(side), scheduled, score \(score)"
+        }
         if row.point.status == .active {
             return "Point \(row.point.number), \(side), live, score \(score)"
         }
@@ -150,6 +153,15 @@ struct PointListView: View {
                 Text("\(row.ourTotal) - \(row.theirTotal)")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                if row.point.status == .scheduled {
+                    Text("Scheduled")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(.secondary.opacity(0.15))
+                        .clipShape(.capsule)
+                }
                 if row.point.status == .active {
                     Text("Live")
                         .font(.caption)

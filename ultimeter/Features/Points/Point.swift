@@ -8,8 +8,18 @@ import SwiftData
 
 /// The status of a point.
 enum PointStatus: String, Codable {
+    case scheduled
     case active
     case complete
+
+    /// The name shown in the user interface.
+    var displayName: String {
+        switch self {
+        case .scheduled: "Scheduled"
+        case .active: "Live"
+        case .complete: "Complete"
+        }
+    }
 }
 
 /// The result of a completed point from our perspective.
@@ -62,6 +72,9 @@ final class Point {
     var game: Game?
     var line: [Player] = []
 
+    /// Whether the line is locked. Pull locks it, Sub unlocks it.
+    var lineLocked: Bool = false
+
     /// The outcome of this point, if it is complete.
     var outcome: PointOutcome? {
         guard status == .complete, let scoredBy else { return nil }
@@ -80,7 +93,7 @@ final class Point {
     init(
         sequence: Int,
         number: Int,
-        status: PointStatus = .active,
+        status: PointStatus = .scheduled,
         startingPosition: StartingPosition,
         scoredBy: ScoringTeam? = nil,
         createdAt: Date = Date(),

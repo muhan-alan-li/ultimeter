@@ -10,6 +10,7 @@ import SwiftData
 enum PointLineError: Error, LocalizedError {
     case notOnTeam
     case lineFull
+    case lineLocked
     case saveFailed(underlying: Error)
 
     var errorDescription: String? {
@@ -18,6 +19,8 @@ enum PointLineError: Error, LocalizedError {
             "This player is not on the team."
         case .lineFull:
             "The line already has 7 players."
+        case .lineLocked:
+            "The line is locked. Press Sub to change it."
         case .saveFailed(let underlying):
             "The line could not be updated. \(underlying.localizedDescription)"
         }
@@ -63,7 +66,16 @@ final class PointLineViewModel {
         point.line.contains { $0 === player }
     }
 
+    /// Whether the line can change. Scheduled points are open.
+    /// Active points are open only after a sub.
+    func isLineEditable(_ point: Point) -> Bool {
+        if point.status == .scheduled { return true }
+        if point.status == .active { return !point.lineLocked }
+        return false
+    }
+
     func toggle(_ player: Player, in point: Point, for game: Game) throws {
+        guard isLineEditable(point) else { throw PointLineError.lineLocked }
         if let index = point.line.firstIndex(where: { $0 === player }) {
             point.line.remove(at: index)
             try save()
@@ -79,8 +91,9 @@ final class PointLineViewModel {
         try save()
     }
 
-    /// Drop line players who left the team. Call when opening the point.
+    /// Drop line players who left the team. Call when opening an editable point.
     func pruneMissing(from point: Point, for game: Game) throws {
+        guard isLineEditable(point) else { return }
         let before = point.line.count
         point.line.removeAll { lined in
             !game.team.players.contains { $0 === lined }

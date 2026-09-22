@@ -59,6 +59,24 @@ struct PointDetailView: View {
         point.line.count >= PointLineViewModel.maxLineSize
     }
 
+    private var canPull: Bool {
+        point.status == .scheduled
+            && game.status == .live
+            && point.line.count == PointLineViewModel.maxLineSize
+    }
+
+    private var canSub: Bool {
+        point.status == .active && game.status == .live && point.lineLocked
+    }
+
+    private var isLineEditable: Bool {
+        lineViewModel.isLineEditable(point)
+    }
+
+    private var canScore: Bool {
+        point.status == .active || point.status == .complete
+    }
+
     var body: some View {
         List {
             Section("Point") {
@@ -75,6 +93,7 @@ struct PointDetailView: View {
                         }
                     }
                 }
+                LabeledContent("Status", value: point.status.displayName)
                 LabeledContent("Result", value: resultText)
             }
             Section("Line (\(lineCountText))") {
@@ -83,7 +102,7 @@ struct PointDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                if point.status == .active {
+                if isLineEditable && game.status == .live {
                     Text("On line")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -153,33 +172,58 @@ struct PointDetailView: View {
                                     .font(.subheadline)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(.secondary.opacity(0.12))
+                                    .background(
+                                        point.status == .active
+                                            ? .blue.opacity(0.15)
+                                            : .secondary.opacity(0.12)
+                                    )
                                     .clipShape(.capsule)
                             }
                         }
                     }
-                }
-            }
-            Section("Result") {
-                Button {
-                    recordScore(.us)
-                } label: {
-                    HStack {
-                        Text("\(game.team.name) scores")
-                        Spacer()
-                        if point.scoredBy == .us {
-                            Image(systemName: "checkmark")
+                    if canSub {
+                        Button {
+                            unlockForSub()
+                        } label: {
+                            Text("Sub")
+                                .frame(maxWidth: .infinity)
                         }
                     }
                 }
-                Button {
-                    recordScore(.them)
-                } label: {
-                    HStack {
-                        Text("\(game.opponent.name) scores")
-                        Spacer()
-                        if point.scoredBy == .them {
-                            Image(systemName: "checkmark")
+            }
+            if point.status == .scheduled && game.status == .live {
+                Section {
+                    Button {
+                        startPull()
+                    } label: {
+                        Text("Pull")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canPull)
+                }
+            }
+            if canScore {
+                Section("Result") {
+                    Button {
+                        recordScore(.us)
+                    } label: {
+                        HStack {
+                            Text("\(game.team.name) scores")
+                            Spacer()
+                            if point.scoredBy == .us {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    Button {
+                        recordScore(.them)
+                    } label: {
+                        HStack {
+                            Text("\(game.opponent.name) scores")
+                            Spacer()
+                            if point.scoredBy == .them {
+                                Image(systemName: "checkmark")
+                            }
                         }
                     }
                 }
@@ -204,10 +248,28 @@ struct PointDetailView: View {
         do {
             if point.status == .active {
                 try viewModel.completeActivePoint(game, scoredBy: team)
-            } else {
+            } else if point.status == .complete {
                 try viewModel.updatePointResult(game, point: point, scoredBy: team)
+            } else {
+                throw PointDetailError.invalidPoint
             }
             dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func startPull() {
+        do {
+            try viewModel.startPull(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func unlockForSub() {
+        do {
+            try viewModel.unlockForSub(game, point: point)
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -11,6 +11,9 @@ enum PointDetailError: Error, LocalizedError {
     case notLive
     case noActivePoint
     case multipleActivePoints
+    case notScheduledPoint
+    case notActivePoint
+    case lineIncomplete(current: Int, required: Int)
     case invalidPoint
     case detachedPoint
     case saveFailed(underlying: Error)
@@ -23,6 +26,12 @@ enum PointDetailError: Error, LocalizedError {
             "There is no active point."
         case .multipleActivePoints:
             "There is more than one active point."
+        case .notScheduledPoint:
+            "This point already started. This action is not allowed."
+        case .notActivePoint:
+            "This point is not active. This action is not allowed."
+        case .lineIncomplete(let current, let required):
+            "The line has \(current) of \(required) players. Add more players."
         case .invalidPoint:
             "This point cannot change in its current state."
         case .detachedPoint:
@@ -103,6 +112,56 @@ final class PointDetailViewModel {
         context.delete(point)
     }
 
+    private func openPoints(in game: Game) -> [Point] {
+        game.points.filter { $0.status != .complete }
+    }
+
+    /// Start a scheduled point. Locks in the 7-player line.
+    func startPull(_ game: Game, point: Point) throws {
+        guard game.status == .live else { throw PointDetailError.notLive }
+        guard point.game === game else { throw PointDetailError.detachedPoint }
+        guard game.points.contains(where: { $0 === point }) else {
+            throw PointDetailError.detachedPoint
+        }
+        guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
+        guard point.line.count == PointLineViewModel.maxLineSize else {
+            throw PointDetailError.lineIncomplete(
+                current: point.line.count,
+                required: PointLineViewModel.maxLineSize
+            )
+        }
+        do {
+            point.status = .active
+            point.lineLocked = true
+            try save()
+        } catch let error as PointDetailError {
+            throw error
+        } catch {
+            context.rollback()
+            throw PointDetailError.saveFailed(underlying: error)
+        }
+    }
+
+    /// Unlock the line on an active point so players can sub in.
+    /// The point stays active. No new pull is needed.
+    func unlockForSub(_ game: Game, point: Point) throws {
+        guard game.status == .live else { throw PointDetailError.notLive }
+        guard point.game === game else { throw PointDetailError.detachedPoint }
+        guard game.points.contains(where: { $0 === point }) else {
+            throw PointDetailError.detachedPoint
+        }
+        guard point.status == .active else { throw PointDetailError.notActivePoint }
+        do {
+            point.lineLocked = false
+            try save()
+        } catch let error as PointDetailError {
+            throw error
+        } catch {
+            context.rollback()
+            throw PointDetailError.saveFailed(underlying: error)
+        }
+    }
+
     func completeActivePoint(_ game: Game, scoredBy: ScoringTeam) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
         let active = activePoints(in: game)
@@ -125,7 +184,7 @@ final class PointDetailViewModel {
             }
             let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
             let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-            _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
+            _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
             try save()
         } catch let error as PointDetailError {
             throw error
@@ -147,8 +206,8 @@ final class PointDetailViewModel {
     }
 
     private func endLiveGame(_ game: Game) {
-        if let active = activePoints(in: game).first {
-            deletePoint(active, from: game)
+        if let open = openPoints(in: game).first {
+            deletePoint(open, from: game)
         }
         game.status = .ended
     }
@@ -157,7 +216,7 @@ final class PointDetailViewModel {
         game.status = .live
         let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
         let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-        _ = insertPoint(in: game, number: nextNumber, side: side, status: .active)
+        _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
     }
 
     func updatePointResult(_ game: Game, point: Point, scoredBy: ScoringTeam) throws {

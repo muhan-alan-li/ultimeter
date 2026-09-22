@@ -63,7 +63,7 @@ final class GameDetailViewModel {
         }
         do {
             game.halftimeTarget = (game.targetPoints + 1) / 2
-            let point = game.makePoint(number: 1, side: game.startingPosition, status: .active)
+            let point = game.makePoint(number: 1, side: game.startingPosition, status: .scheduled)
             context.insert(point)
             game.points.append(point)
             game.status = .live
@@ -100,9 +100,9 @@ final class GameDetailViewModel {
             throw GameDetailError.finalScoreBelowCurrent
         }
         do {
-            if let active = game.points.first(where: { $0.status == .active }) {
-                game.points.removeAll { $0 === active }
-                context.delete(active)
+            if let open = game.points.first(where: { $0.status != .complete }) {
+                game.points.removeAll { $0 === open }
+                context.delete(open)
             }
             if ourScore == game.ourScore && theirScore == game.theirScore {
                 game.status = .ended

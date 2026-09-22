@@ -104,11 +104,11 @@ final class Game {
         points.sorted { $0.sequence < $1.sequence }
     }
 
-    /// The single active point, if one exists.
+    /// The single open point (scheduled or active), if one exists.
     var currentPoint: Point? {
-        let active = points.filter { $0.status == .active }
-        guard active.count == 1 else { return nil }
-        return active[0]
+        let open = points.filter { $0.status != .complete }
+        guard open.count == 1 else { return nil }
+        return open[0]
     }
 
     /// The first point number of the second half, if halftime exists.
