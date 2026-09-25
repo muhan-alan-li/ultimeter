@@ -34,6 +34,12 @@ final class Player {
     @Relationship(inverse: \Point.line)
     var points: [Point] = []
 
+    @Relationship(inverse: \Stat.player)
+    var stats: [Stat] = []
+
+    @Relationship(inverse: \Stat.relatedPlayer)
+    var relatedStats: [Stat] = []
+
     init(name: String, gender: Gender) {
         self.name = name
         self.gender = gender

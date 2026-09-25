@@ -15,6 +15,7 @@ struct PointDetailView: View {
     @State private var viewModel: PointDetailViewModel
     @State private var lineViewModel: PointLineViewModel
     @State private var errorMessage: String?
+    @State private var showDetails = false
 
     init(context: ModelContext, game: Game, point: Point) {
         self.game = game
@@ -63,6 +64,7 @@ struct PointDetailView: View {
         point.status == .scheduled
             && game.status == .live
             && point.line.count == PointLineViewModel.maxLineSize
+            && (point.startingPosition == .offense || point.puller != nil)
     }
 
     private var canSub: Bool {
@@ -73,8 +75,40 @@ struct PointDetailView: View {
         lineViewModel.isLineEditable(point)
     }
 
-    private var showResult: Bool {
-        point.status == .active || point.status == .complete
+    private var isOngoing: Bool {
+        point.status == .active && point.lineLocked && game.status == .live
+    }
+
+    private var holderOnLine: Bool {
+        guard let holder = point.holder else { return false }
+        return point.line.contains { $0 === holder }
+    }
+
+    private var needsPickup: Bool {
+        point.holder == nil || !holderOnLine
+    }
+
+    private var canUndoTurnover: Bool {
+        point.orderedStats.last?.kind == .turnover
+    }
+
+    private var canUndoDrop: Bool {
+        point.orderedStats.last?.kind == .drop
+    }
+
+    private var canUndoBlock: Bool {
+        point.orderedStats.last?.kind == .block
+    }
+
+    private var pointSummary: String {
+        var parts = [point.status.displayName]
+        parts.append(point.startingPosition == .offense ? "Offense start" : "Defense start")
+        if point.startingPosition == .offense && point.status != .scheduled {
+            if let holder = point.holder {
+                parts.append("Disc: \(holder.name)")
+            }
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var canScore: Bool {
@@ -83,6 +117,24 @@ struct PointDetailView: View {
             return point.line.count == PointLineViewModel.maxLineSize
         }
         return false
+    }
+
+    private var pullerText: String {
+        if point.startingPosition == .offense {
+            "They pulled"
+        } else if let puller = point.puller {
+            puller.name
+        } else {
+            "Not set"
+        }
+    }
+
+    private var scorerText: String? {
+        if point.status == .scheduled { return nil }
+        if let scorer = point.scorer {
+            return scorer.name
+        }
+        return point.scoredBy == .them ? "No scorer" : "Not set"
     }
 
     private var lineIncompleteText: String? {
@@ -107,10 +159,40 @@ struct PointDetailView: View {
                         }
                     }
                 }
-                LabeledContent("Status", value: point.status.displayName)
-                LabeledContent("Result", value: resultText)
+                Text(pointSummary)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                DisclosureGroup("Details", isExpanded: $showDetails) {
+                    LabeledContent("Status", value: point.status.displayName)
+                    LabeledContent("Result", value: resultText)
+                    if point.status != .scheduled {
+                        LabeledContent("Puller", value: pullerText)
+                    }
+                    if let scorerText {
+                        LabeledContent("Scorer", value: scorerText)
+                    }
+                    if !point.blockers.isEmpty {
+                        LabeledContent(
+                            "Blocks",
+                            value: point.blockers.map(\.name).joined(separator: ", ")
+                        )
+                    }
+                    if point.status != .scheduled {
+                        LabeledContent("Disc", value: point.holder?.name ?? "No one")
+                        LabeledContent("Passes", value: "\(point.passCount)")
+                    }
+                    if point.status != .scheduled && point.dropCount > 0 {
+                        LabeledContent("Drops", value: "\(point.dropCount)")
+                    }
+                }
             }
-            Section("Line (\(lineCountText))") {
+            if !isOngoing {
+                Section("Line (\(lineCountText))") {
+                if let lineIncompleteText {
+                    Text(lineIncompleteText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if roster.count < PointLineViewModel.maxLineSize {
                     Text("Roster has fewer than 7 players. Add players to the team.")
                         .font(.footnote)
@@ -203,26 +285,224 @@ struct PointDetailView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
+                    }
                 }
+            }
+            if isOngoing {
+                if point.phase == .defense {
+                    Section("On Field - Defense") {
+                        ForEach(sortedLine) { player in
+                            HStack {
+                                Text(player.name)
+                                    .lineLimit(1)
+                                Spacer()
+                                Button("Block") {
+                                    recordBlock(player)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .accessibilityLabel("\(player.name) blocks")
+                            }
+                        }
+                        Button {
+                            logTheirTurnover()
+                        } label: {
+                            Text("They threw it away")
+                                .frame(maxWidth: .infinity)
+                        }
+                        if canUndoDrop {
+                            Button {
+                                undoDrop()
+                            } label: {
+                                Text("Undo drop")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        if canUndoTurnover {
+                            Button {
+                                clearTurnover()
+                            } label: {
+                                Text("Undo turnover")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                            Button {
+                                recordScore(.them)
+                            } label: {
+                                Text("\(game.opponent.name) scores")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .disabled(!canScore)
+                            Button {
+                                unlockForSub()
+                            } label: {
+                                Text("Sub")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    } else if needsPickup {
+                        Section("On Field - Pickup") {
+                            Text("Who picks up?")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            ForEach(sortedLine) { player in
+                                HStack {
+                                    Text(player.name)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Button("Pickup") {
+                                        pickup(player)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                        .accessibilityLabel("\(player.name) picks up")
+                                }
+                            }
+                            if canUndoBlock {
+                                Button {
+                                    undoBlock()
+                                } label: {
+                                    Text("Undo block")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            if canUndoTurnover {
+                                Button {
+                                    clearTurnover()
+                                } label: {
+                                    Text("Undo turnover")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            Button {
+                                recordScore(.them)
+                            } label: {
+                                Text("\(game.opponent.name) scores")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .disabled(!canScore)
+                            Button {
+                                unlockForSub()
+                            } label: {
+                                Text("Sub")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    } else {
+                        Section("On Field - Score") {
+                            if !holderOnLine {
+                                Text("Holder is off the field.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if holderOnLine {
+                            ForEach(sortedLine) { player in
+                                HStack {
+                                    if point.holder === player {
+                                        Image(systemName: "circle.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.green)
+                                    }
+                                    Text(player.name)
+                                        .lineLimit(1)
+                                        .fontWeight(point.holder === player ? .medium : .regular)
+                                    Spacer()
+                                    if point.holder === player {
+                                        Button("Score") {}
+                                            .buttonStyle(.borderedProminent)
+                                            .controlSize(.small)
+                                            .disabled(true)
+                                            .accessibilityLabel("Holder cannot score directly")
+                                    } else {
+                                        Button("Pass") {
+                                            passTo(player)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                        .accessibilityLabel("Pass to \(player.name)")
+                                        Button("Drop") {
+                                            dropTo(player)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                        .accessibilityLabel("\(player.name) drops")
+                                        Button("Score") {
+                                            scoreForUs(player)
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .controlSize(.small)
+                                        .accessibilityLabel("\(player.name) scores")
+                                    }
+                                }
+                            }
+                            if point.passCount > 0 {
+                                Button {
+                                    clearLastPass()
+                                } label: {
+                                    Text("Undo last pass")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .font(.subheadline)
+                            }
+                            Button {
+                                logTurnover()
+                            } label: {
+                                Text("We turned it over")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            }
+                            Button {
+                                recordScore(.them)
+                            } label: {
+                                Text("\(game.opponent.name) scores")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .disabled(!canScore)
+                            Button {
+                                unlockForSub()
+                            } label: {
+                                Text("Sub")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
             }
             if point.status == .scheduled && game.status == .live {
-                Section {
-                    Button {
-                        startPull()
-                    } label: {
-                        Text("Pull")
-                            .frame(maxWidth: .infinity)
+                if point.startingPosition == .defense && isLineFull {
+                    Section("On Field - Pull") {
+                        ForEach(sortedLine) { player in
+                            HStack {
+                                Text(player.name)
+                                    .lineLimit(1)
+                                Spacer()
+                                Button("Pull") {
+                                    pullForUs(player)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .accessibilityLabel("\(player.name) pulls")
+                            }
+                        }
                     }
-                    .disabled(!canPull)
+                } else {
+                    Section {
+                        if point.startingPosition == .offense {
+                            Text("They pull to start this point.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Button {
+                            startPull()
+                        } label: {
+                            Text("Pull")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .disabled(!canPull)
+                    }
                 }
             }
-            if showResult {
+            if point.status == .complete {
                 Section("Result") {
-                    if let lineIncompleteText {
-                        Text(lineIncompleteText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                     Button {
                         recordScore(.us)
                     } label: {
@@ -283,6 +563,103 @@ struct PointDetailView: View {
     private func startPull() {
         do {
             try viewModel.startPull(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func pullForUs(_ player: Player) {
+        do {
+            try viewModel.pullForUs(game, point: point, player: player)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func pickup(_ player: Player) {
+        do {
+            try viewModel.recordPickup(game, point: point, player: player)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func passTo(_ player: Player) {
+        do {
+            try viewModel.recordPass(game, point: point, receiver: player)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func dropTo(_ player: Player) {
+        do {
+            try viewModel.recordDrop(game, point: point, receiver: player)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func undoDrop() {
+        do {
+            try viewModel.clearDrop(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearLastPass() {
+        do {
+            try viewModel.clearLastPass(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func logTurnover() {
+        do {
+            try viewModel.logOurTurnover(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearTurnover() {
+        do {
+            try viewModel.clearTurnover(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func scoreForUs(_ player: Player) {
+        do {
+            try viewModel.scoreForUs(game, point: point, player: player)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func recordBlock(_ player: Player) {
+        do {
+            try viewModel.recordBlock(game, point: point, player: player)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func undoBlock() {
+        do {
+            try viewModel.clearLastBlock(game, point: point)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func logTheirTurnover() {
+        do {
+            try viewModel.logTheirTurnover(game, point: point)
         } catch {
             errorMessage = error.localizedDescription
         }
