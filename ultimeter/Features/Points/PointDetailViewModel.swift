@@ -229,6 +229,17 @@ final class PointDetailViewModel {
     func scoreForUs(_ game: Game, point: Point, player: Player) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
         try requireActiveOffer(game, point: point)
+        let active = activePoints(in: game)
+        guard active.count == 1, active.first === point else {
+            throw PointDetailError.multipleActivePoints
+        }
+        guard point.line.count == PointLineViewModel.maxLineSize else {
+            throw PointDetailError.lineIncomplete(
+                current: point.line.count,
+                required: PointLineViewModel.maxLineSize
+            )
+        }
+        guard pullStat(in: point) != nil else { throw PointDetailError.missingPull }
         guard point.phase == .possession else { throw PointDetailError.invalidPoint }
         guard let holder = point.holder,
             point.line.contains(where: { $0 === holder }) else {
@@ -238,16 +249,14 @@ final class PointDetailViewModel {
             throw PointDetailError.notOnLine
         }
         guard player !== holder else { throw PointDetailError.invalidPoint }
-        do {
-            try recordPass(game, point: point, receiver: player)
-            _ = setStatPlayer(in: point, kind: .goal, to: player)
-            try completeActivePoint(game, scoredBy: .us)
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+        let pass = point.makeStat(kind: .pass)
+        pass.player = holder
+        pass.relatedPlayer = player
+        context.insert(pass)
+        point.stats.append(pass)
+        _ = setStatPlayer(in: point, kind: .goal, to: player)
+        finishPoint(game, point: point, scoredBy: .us)
+        try save()
     }
 
     private func requireActiveOffer(_ game: Game, point: Point) throws {
@@ -532,21 +541,7 @@ final class PointDetailViewModel {
             } else if let goal = goalStat(in: point) {
                 deleteStat(goal, from: point)
             }
-            point.scoredBy = scoredBy
-            point.status = .complete
-            point.lineLocked = true
-            if game.ourScore >= game.targetPoints || game.theirScore >= game.targetPoints {
-                game.status = .ended
-                try save()
-                return
-            }
-            if game.halftime == nil
-                && (game.ourScore == game.halfTarget || game.theirScore == game.halfTarget) {
-                insertHalftime(in: game, pointNumber: point.number + 1)
-            }
-            let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-            let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-            _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
+            finishPoint(game, point: point, scoredBy: scoredBy)
             try save()
         } catch let error as PointDetailError {
             throw error
@@ -554,6 +549,20 @@ final class PointDetailViewModel {
             context.rollback()
             throw PointDetailError.saveFailed(underlying: error)
         }
+    }
+
+    private func finishPoint(_ game: Game, point: Point, scoredBy: ScoringTeam) {
+        point.scoredBy = scoredBy
+        point.status = .complete
+        point.lineLocked = true
+        if reachedTarget(game) {
+            game.status = .ended
+            return
+        }
+        insertHalftimeIfNeeded(in: game)
+        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
+        let side = sideForNextPoint(in: game, nextNumber: nextNumber)
+        _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
     }
 
     private func insertHalftimeIfNeeded(in game: Game) {
