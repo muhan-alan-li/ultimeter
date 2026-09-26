@@ -56,8 +56,6 @@ final class PlayerFormViewModel {
         team.players.append(player)
         do {
             try save()
-        } catch let error as PlayerFormError {
-            throw error
         } catch {
             throw PlayerFormError.saveFailed(underlying: error)
         }

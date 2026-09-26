@@ -30,16 +30,6 @@ enum PossessionState: String, Codable {
     case defense
     case awaitingPickup
     case possession
-
-    /// The name shown in the user interface.
-    var displayName: String {
-        switch self {
-        case .none: "No possession"
-        case .defense: "Defense"
-        case .awaitingPickup: "Loose disc"
-        case .possession: "Our disc"
-        }
-    }
 }
 
 /// The result of a completed point from our perspective.

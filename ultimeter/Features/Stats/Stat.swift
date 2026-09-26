@@ -18,8 +18,7 @@ enum StatKind: String, Codable {
 }
 
 /// One event in a point log.
-/// Uses an empty `player` for opponent events.
-/// Keeps `relatedPlayer` empty in v1 for future passes.
+/// `player` is the holder or actor. `relatedPlayer` is the receiver for pass and drop.
 @Model
 final class Stat {
     var sequence: Int

@@ -88,16 +88,20 @@ struct PointDetailView: View {
         point.holder == nil || !holderOnLine
     }
 
+    private var lastStatKind: StatKind? {
+        point.orderedStats.last?.kind
+    }
+
     private var canUndoTurnover: Bool {
-        point.orderedStats.last?.kind == .turnover
+        lastStatKind == .turnover
     }
 
     private var canUndoDrop: Bool {
-        point.orderedStats.last?.kind == .drop
+        lastStatKind == .drop
     }
 
     private var canUndoBlock: Bool {
-        point.orderedStats.last?.kind == .block
+        lastStatKind == .block
     }
 
     private var pointSummary: String {
@@ -117,6 +121,34 @@ struct PointDetailView: View {
             return point.line.count == PointLineViewModel.maxLineSize
         }
         return false
+    }
+
+    private var opponentScoresButton: some View {
+        Button {
+            recordScore(.them)
+        } label: {
+            Text("\(game.opponent.name) scores")
+                .frame(maxWidth: .infinity)
+        }
+        .disabled(!canScore)
+    }
+
+    private var subButton: some View {
+        Button {
+            unlockForSub()
+        } label: {
+            Text("Sub")
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var undoTurnoverButton: some View {
+        Button {
+            clearTurnover()
+        } label: {
+            Text("Undo turnover")
+                .frame(maxWidth: .infinity)
+        }
     }
 
     private var pullerText: String {
@@ -319,26 +351,10 @@ struct PointDetailView: View {
                             }
                         }
                         if canUndoTurnover {
-                            Button {
-                                clearTurnover()
-                            } label: {
-                                Text("Undo turnover")
-                                    .frame(maxWidth: .infinity)
-                            }
+                            undoTurnoverButton
                         }
-                            Button {
-                                recordScore(.them)
-                            } label: {
-                                Text("\(game.opponent.name) scores")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .disabled(!canScore)
-                            Button {
-                                unlockForSub()
-                            } label: {
-                                Text("Sub")
-                                    .frame(maxWidth: .infinity)
-                            }
+                        opponentScoresButton
+                        subButton
                         }
                     } else if needsPickup {
                         Section("On Field - Pickup") {
@@ -367,26 +383,10 @@ struct PointDetailView: View {
                                 }
                             }
                             if canUndoTurnover {
-                                Button {
-                                    clearTurnover()
-                                } label: {
-                                    Text("Undo turnover")
-                                        .frame(maxWidth: .infinity)
-                                }
+                                undoTurnoverButton
                             }
-                            Button {
-                                recordScore(.them)
-                            } label: {
-                                Text("\(game.opponent.name) scores")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .disabled(!canScore)
-                            Button {
-                                unlockForSub()
-                            } label: {
-                                Text("Sub")
-                                    .frame(maxWidth: .infinity)
-                            }
+                            opponentScoresButton
+                            subButton
                         }
                     } else {
                         Section("On Field - Score") {
@@ -408,10 +408,9 @@ struct PointDetailView: View {
                                         .fontWeight(point.holder === player ? .medium : .regular)
                                     Spacer()
                                     if point.holder === player {
-                                        Button("Score") {}
-                                            .buttonStyle(.borderedProminent)
-                                            .controlSize(.small)
-                                            .disabled(true)
+                                        Text("Holder")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                             .accessibilityLabel("Holder cannot score directly")
                                     } else {
                                         Button("Pass") {
@@ -451,19 +450,8 @@ struct PointDetailView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             }
-                            Button {
-                                recordScore(.them)
-                            } label: {
-                                Text("\(game.opponent.name) scores")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .disabled(!canScore)
-                            Button {
-                                unlockForSub()
-                            } label: {
-                                Text("Sub")
-                                    .frame(maxWidth: .infinity)
-                            }
+                            opponentScoresButton
+                            subButton
                         }
                     }
             }
@@ -514,7 +502,6 @@ struct PointDetailView: View {
                             }
                         }
                     }
-                    .disabled(!canScore)
                     Button {
                         recordScore(.them)
                     } label: {
@@ -526,7 +513,6 @@ struct PointDetailView: View {
                             }
                         }
                     }
-                    .disabled(!canScore)
                 }
             }
         }

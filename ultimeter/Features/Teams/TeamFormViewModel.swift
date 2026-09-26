@@ -75,8 +75,6 @@ final class TeamFormViewModel {
         }
         do {
             try save()
-        } catch let error as TeamFormError {
-            throw error
         } catch {
             throw TeamFormError.saveFailed(underlying: error)
         }

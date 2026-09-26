@@ -80,12 +80,12 @@ final class PointDetailViewModel {
         game.points.filter { $0.status == .active }
     }
 
-    private func maxCompletedNumber(in game: Game) -> Int? {
-        game.points.filter { $0.status == .complete }.map(\.number).max()
-    }
-
     private func lastCompletedPoint(in game: Game) -> Point? {
         game.points.filter { $0.status == .complete }.max { $0.number < $1.number }
+    }
+
+    private func maxCompletedNumber(in game: Game) -> Int? {
+        lastCompletedPoint(in: game)?.number
     }
 
     private func opposite(of side: StartingPosition) -> StartingPosition {
@@ -159,10 +159,7 @@ final class PointDetailViewModel {
     /// Pull with one player in a single tap on a scheduled defense point.
     func pullForUs(_ game: Game, point: Point, player: Player) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+        try requireBelongs(game, point: point)
         guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
         guard point.startingPosition == .defense else { throw PointDetailError.invalidPoint }
         guard point.line.contains(where: { $0 === player }) else {
@@ -183,10 +180,7 @@ final class PointDetailViewModel {
     /// The disc stays loose. Pick up to take possession.
     func recordBlock(_ game: Game, point: Point, player: Player) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+        try requireBelongs(game, point: point)
         guard point.status == .active else { throw PointDetailError.notActivePoint }
         guard point.phase == .defense else { throw PointDetailError.invalidPoint }
         guard point.line.contains(where: { $0 === player }) else {
@@ -259,11 +253,15 @@ final class PointDetailViewModel {
         try save()
     }
 
-    private func requireActiveOffer(_ game: Game, point: Point) throws {
+    private func requireBelongs(_ game: Game, point: Point) throws {
         guard point.game === game else { throw PointDetailError.detachedPoint }
         guard game.points.contains(where: { $0 === point }) else {
             throw PointDetailError.detachedPoint
         }
+    }
+
+    private func requireActiveOffer(_ game: Game, point: Point) throws {
+        try requireBelongs(game, point: point)
         guard point.status == .active else { throw PointDetailError.notActivePoint }
     }
 
@@ -454,10 +452,7 @@ final class PointDetailViewModel {
     /// Start a scheduled point. Locks in the 7-player line.
     func startPull(_ game: Game, point: Point) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+        try requireBelongs(game, point: point)
         guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
         let actives = activePoints(in: game)
         guard actives.isEmpty else { throw PointDetailError.multipleActivePoints }
@@ -495,10 +490,7 @@ final class PointDetailViewModel {
     /// The point stays active. No new pull is needed.
     func unlockForSub(_ game: Game, point: Point) throws {
         guard game.status == .live else { throw PointDetailError.notLive }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+        try requireBelongs(game, point: point)
         guard point.status == .active else { throw PointDetailError.notActivePoint }
         do {
             point.lineLocked = false
@@ -595,10 +587,7 @@ final class PointDetailViewModel {
             throw PointDetailError.notLive
         }
         guard point.status == .complete else { throw PointDetailError.invalidPoint }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+        try requireBelongs(game, point: point)
         if point.scoredBy == scoredBy { return }
         do {
             point.scoredBy = scoredBy

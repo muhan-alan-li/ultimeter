@@ -16,12 +16,6 @@ struct SuggestingPicker: View {
 
     private let maxSuggestions = 5
 
-    init(title: String, text: Binding<String>, values: [String]) {
-        self.title = title
-        self._text = text
-        self.values = values
-    }
-
     /// Up to 5 values that match the typed text.
     /// An empty text matches every value.
     private var suggestions: [String] {
@@ -64,11 +58,7 @@ struct SuggestingPicker: View {
             }
         }
         .padding(6)
-        .background(
-            Color(.secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 10)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
