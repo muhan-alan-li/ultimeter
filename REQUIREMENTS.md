@@ -90,10 +90,11 @@ Export game/tournament/season as csv
 Team -> Roster -> Player
      -> Season -> Tournament -> Game
      -> Season -> Game
-Game -> Point -> Stat
+Game -> Point -> Event
 
-A Stat records a pull with its state (caught, landed, or out of bounds), a pass, or a turnover with its type (block or interception, throwaway, drop, or incompletion by the thrower)
-An assist is not stored, it is derived from the last pass before a goal
+Store point actions as ordered events.
+Use events for pulls, pickups, passes, blocks, drops, turnovers, scores, and substitutions.
+Derive possession, scores, assists, and reports from events.
 
 ## 4. Non-Functional Requirements
 
