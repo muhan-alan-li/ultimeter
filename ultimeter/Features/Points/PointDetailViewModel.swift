@@ -4,615 +4,179 @@
 //
 
 import Foundation
-import SwiftData
+import Observation
 
-/// Errors thrown by the point detail screen.
-enum PointDetailError: Error, LocalizedError {
-    case notLive
-    case noActivePoint
-    case multipleActivePoints
-    case notScheduledPoint
-    case notActivePoint
-    case lineIncomplete(current: Int, required: Int)
-    case missingPull
-    case missingPickup
-    case missingScorer
-    case notHolder
-    case notOnLine
-    case invalidPoint
-    case detachedPoint
-    case saveFailed(underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .notLive:
-            "The game is not live. This action is not allowed."
-        case .noActivePoint:
-            "There is no active point."
-        case .multipleActivePoints:
-            "There is more than one active point."
-        case .notScheduledPoint:
-            "This point already started. This action is not allowed."
-        case .notActivePoint:
-            "This point is not active. This action is not allowed."
-        case .lineIncomplete(let current, let required):
-            "The line has \(current) of \(required) players. Add more players."
-        case .missingPull:
-            "This point has no puller. Select a puller."
-        case .missingPickup:
-            "This point has no pickup. Select who picks up."
-        case .missingScorer:
-            "This point has no scorer. Select a scorer."
-        case .notHolder:
-            "Only the holder can score."
-        case .notOnLine:
-            "This player is not on the line."
-        case .invalidPoint:
-            "This point cannot change in its current state."
-        case .detachedPoint:
-            "This point does not belong to this game."
-        case .saveFailed(let underlying):
-            "The point could not be updated. \(underlying.localizedDescription)"
-        }
-    }
-}
-
-/// View model for `PointDetailView`. Owns point result entry.
+/// The view model of the point detail screen.
+/// Owns the point offer, the line, and every result entry action.
 @Observable
 @MainActor
-final class PointDetailViewModel {
-    private let context: ModelContext
+final class PointDetailViewModel: ScreenModel {
+    @ObservationIgnored var dependencies: AppDependencies?
+    var error: AppError?
 
-    init(context: ModelContext) {
-        self.context = context
+    let game: Game
+    let point: Point
+
+    init(game: Game, point: Point) {
+        self.game = game
+        self.point = point
     }
 
-    private func save() throws {
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
+    // MARK: - Display
+
+    /// The state of the point and the actions it offers.
+    var offer: PointOffer {
+        PointRules.offer(game: game, point: point)
+    }
+
+    var title: String { "Point \(point.number)" }
+
+    /// Our team name in this game.
+    var ourTeamName: String { game.team.name }
+
+    /// The opponent name in this game.
+    var opponentName: String { game.opponent.name }
+
+    /// The start line of the summary.
+    var startedOnText: String {
+        "Started on \(point.startingPosition == .offense ? "offense" : "defense")"
+    }
+
+    /// The status line of the details group.
+    var statusText: String { point.status.displayName }
+
+    /// The result of the point, if the point is complete.
+    var resultText: String {
+        if let outcome = point.outcome { return outcome.label }
+        if let scoredBy = point.scoredBy { return scoredBy.teamName(in: game) }
+        return "No result yet"
+    }
+
+    /// The one-line summary under the point title.
+    var summary: String {
+        var parts = [point.status.displayName]
+        parts.append(point.startingPosition == .offense ? "Offense start" : "Defense start")
+        if point.startingPosition == .offense, point.status != .scheduled,
+            let holder = point.holder {
+            parts.append("Disc: \(holder.name)")
         }
+        return parts.joined(separator: " · ")
     }
 
-    private func activePoints(in game: Game) -> [Point] {
-        game.points.filter { $0.status == .active }
+    /// The text of the line count.
+    var lineCountText: String {
+        "\(point.line.count) of \(LineRules.size) selected"
     }
 
-    private func lastCompletedPoint(in game: Game) -> Point? {
-        game.points.filter { $0.status == .complete }.max { $0.number < $1.number }
+    /// The puller line of the details group.
+    var pullerText: String {
+        if point.startingPosition == .offense { return "They pulled" }
+        return point.puller?.name ?? "Not set"
     }
 
-    private func maxCompletedNumber(in game: Game) -> Int? {
-        lastCompletedPoint(in: game)?.number
+    /// The scorer line of the details group.
+    var scorerText: String? {
+        guard point.status != .scheduled else { return nil }
+        if let scorer = point.scorer { return scorer.name }
+        return point.scoredBy == .them ? "No scorer" : "Not set"
     }
 
-    private func opposite(of side: StartingPosition) -> StartingPosition {
-        side == .offense ? .defense : .offense
-    }
-
-    private func sideForNextPoint(in game: Game, nextNumber: Int) -> StartingPosition {
-        if let half = game.halftime, nextNumber == half.pointNumber {
-            return opposite(of: game.startingPosition)
-        }
-        guard let last = lastCompletedPoint(in: game) else {
-            return game.startingPosition
-        }
-        switch last.scoredBy {
-        case .us:
-            return .defense
-        case .them:
-            return .offense
-        case nil:
-            return game.startingPosition
-        }
-    }
-
-    private func insertPoint(in game: Game, number: Int, side: StartingPosition, status: PointStatus) -> Point {
-        let point = game.makePoint(number: number, side: side, status: status)
-        context.insert(point)
-        game.points.append(point)
-        return point
-    }
-
-    private func insertHalftime(in game: Game, pointNumber: Int) {
-        let half = game.makeHalftime(pointNumber: pointNumber)
-        context.insert(half)
-        game.halftime = half
-    }
-
-    private func deletePoint(_ point: Point, from game: Game) {
-        game.points.removeAll { $0 === point }
-        context.delete(point)
-    }
-
-    private func openPoints(in game: Game) -> [Point] {
-        game.points.filter { $0.status != .complete }
-    }
-
-    private func pullStat(in point: Point) -> Stat? {
-        point.orderedStats.first { $0.kind == .pull }
-    }
-
-    private func goalStat(in point: Point) -> Stat? {
-        point.orderedStats.first { $0.kind == .goal }
-    }
-
-    private func deleteStat(_ stat: Stat, from point: Point) {
-        point.stats.removeAll { $0 === stat }
-        context.delete(stat)
-    }
-
-    private func setStatPlayer(in point: Point, kind: StatKind, to player: Player?) -> Stat {
-        if let existing = point.orderedStats.first(where: { $0.kind == kind }) {
-            existing.player = player
-            return existing
-        }
-        let stat = point.makeStat(kind: kind)
-        stat.player = player
-        context.insert(stat)
-        point.stats.append(stat)
-        return stat
-    }
-
-    /// Pull with one player in a single tap on a scheduled defense point.
-    func pullForUs(_ game: Game, point: Point, player: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireBelongs(game, point: point)
-        guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
-        guard point.startingPosition == .defense else { throw PointDetailError.invalidPoint }
-        guard point.line.contains(where: { $0 === player }) else {
-            throw PointDetailError.notOnLine
-        }
-        do {
-            _ = setStatPlayer(in: point, kind: .pull, to: player)
-            try startPull(game, point: point)
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
+    /// The text of a line problem.
+    func text(for problem: LineProblem) -> String {
+        switch problem {
+        case .incomplete(let current, let required):
+            return "Line has \(current) of \(required). Complete the sub to continue."
+        case .rosterTooSmall(let have, let required):
+            return "Roster has \(have) players. Add players to the team to reach \(required)."
         }
     }
 
-    /// Record a block by one player. Blocks stack over stands.
-    /// The disc stays loose. Pick up to take possession.
-    func recordBlock(_ game: Game, point: Point, player: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireBelongs(game, point: point)
-        guard point.status == .active else { throw PointDetailError.notActivePoint }
-        guard point.phase == .defense else { throw PointDetailError.invalidPoint }
-        guard point.line.contains(where: { $0 === player }) else {
-            throw PointDetailError.notOnLine
-        }
-        do {
-            let stat = point.makeStat(kind: .block)
-            stat.player = player
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
+    /// The players who are not on the line.
+    func candidates(_ offer: PointOffer) -> [Player] {
+        offer.roster.filter { player in
+            !offer.line.contains { $0 === player }
         }
     }
 
-    /// Delete the last block to fix a wrong tap.
-    func clearLastBlock(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard let last = point.orderedStats.last, last.kind == .block else {
-            throw PointDetailError.invalidPoint
-        }
-        do {
-            deleteStat(last, from: point)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    // MARK: - Line
+
+    func toggleLine(_ player: Player) {
+        attempt { try deps.point.toggleLine(player, in: point) }
     }
 
-    /// Score on one receiver in a single tap.
-    /// Logs the final pass from the holder, then the goal.
-    func scoreForUs(_ game: Game, point: Point, player: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        let active = activePoints(in: game)
-        guard active.count == 1, active.first === point else {
-            throw PointDetailError.multipleActivePoints
-        }
-        guard point.line.count == PointLineViewModel.maxLineSize else {
-            throw PointDetailError.lineIncomplete(
-                current: point.line.count,
-                required: PointLineViewModel.maxLineSize
-            )
-        }
-        guard pullStat(in: point) != nil else { throw PointDetailError.missingPull }
-        guard point.phase == .possession else { throw PointDetailError.invalidPoint }
-        guard let holder = point.holder,
-            point.line.contains(where: { $0 === holder }) else {
-            throw PointDetailError.missingPickup
-        }
-        guard point.line.contains(where: { $0 === player }) else {
-            throw PointDetailError.notOnLine
-        }
-        guard player !== holder else { throw PointDetailError.invalidPoint }
-        let pass = point.makeStat(kind: .pass)
-        pass.player = holder
-        pass.relatedPlayer = player
-        context.insert(pass)
-        point.stats.append(pass)
-        _ = setStatPlayer(in: point, kind: .goal, to: player)
-        finishPoint(game, point: point, scoredBy: .us)
-        try save()
+    func pruneLine() {
+        attempt { try deps.point.pruneLine(in: point) }
     }
 
-    private func requireBelongs(_ game: Game, point: Point) throws {
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard game.points.contains(where: { $0 === point }) else {
-            throw PointDetailError.detachedPoint
-        }
+    func sub() {
+        attempt { try deps.point.unlockLine(in: point) }
     }
 
-    private func requireActiveOffer(_ game: Game, point: Point) throws {
-        try requireBelongs(game, point: point)
-        guard point.status == .active else { throw PointDetailError.notActivePoint }
+    // MARK: - Pull
+
+    func startPull() {
+        attempt { try deps.point.startPull(in: point) }
     }
 
-    /// Record who picks up. Works after their pull on offense
-    /// and after our block on defense. Allows a new pickup
-    /// when the holder leaves the line.
-    func recordPickup(_ game: Game, point: Point, player: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        switch point.phase {
-        case .awaitingPickup:
-            break
-        case .possession:
-            if let holder = point.holder,
-                point.line.contains(where: { $0 === holder }) {
-                throw PointDetailError.invalidPoint
-            }
-        default:
-            throw PointDetailError.invalidPoint
-        }
-        guard point.line.contains(where: { $0 === player }) else {
-            throw PointDetailError.notOnLine
-        }
-        do {
-            let stat = point.makeStat(kind: .pickup)
-            stat.player = player
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func pull(_ player: Player) {
+        attempt { try deps.point.pull(in: point, by: player) }
     }
 
-    /// Record a pass from the holder to one receiver.
-    /// Works on offense and on defense after pickup.
-    func recordPass(_ game: Game, point: Point, receiver: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard point.phase == .possession else { throw PointDetailError.invalidPoint }
-        guard let holder = point.holder else { throw PointDetailError.missingPickup }
-        guard point.line.contains(where: { $0 === holder }) else {
-            throw PointDetailError.notOnLine
-        }
-        guard point.line.contains(where: { $0 === receiver }) else {
-            throw PointDetailError.notOnLine
-        }
-        guard receiver !== holder else { throw PointDetailError.invalidPoint }
-        do {
-            let stat = point.makeStat(kind: .pass)
-            stat.player = holder
-            stat.relatedPlayer = receiver
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    // MARK: - Disc
+
+    func pickUp(_ player: Player) {
+        attempt { try deps.point.recordPickup(in: point, by: player) }
     }
 
-    /// Log a dropped pass to one receiver in a single tap.
-    /// Records the throw plus the drop. They take possession.
-    func recordDrop(_ game: Game, point: Point, receiver: Player) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard point.phase == .possession else { throw PointDetailError.invalidPoint }
-        guard let holder = point.holder,
-            point.line.contains(where: { $0 === holder }) else {
-            throw PointDetailError.missingPickup
-        }
-        guard point.line.contains(where: { $0 === receiver }) else {
-            throw PointDetailError.notOnLine
-        }
-        guard receiver !== holder else { throw PointDetailError.invalidPoint }
-        do {
-            let stat = point.makeStat(kind: .drop)
-            stat.player = holder
-            stat.relatedPlayer = receiver
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func pass(to receiver: Player) {
+        attempt { try deps.point.recordPass(in: point, to: receiver) }
     }
 
-    /// Delete the last drop to undo it.
-    func clearDrop(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard let last = point.orderedStats.last, last.kind == .drop else {
-            throw PointDetailError.invalidPoint
-        }
-        do {
-            deleteStat(last, from: point)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func drop(to receiver: Player) {
+        attempt { try deps.point.recordDrop(in: point, to: receiver) }
     }
 
-    /// Delete the last pass to fix a wrong pick.
-    func clearLastPass(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard point.phase == .possession else { throw PointDetailError.invalidPoint }
-        guard let last = point.orderedStats.last(where: { $0.kind == .pass }) else {
-            throw PointDetailError.invalidPoint
-        }
-        do {
-            deleteStat(last, from: point)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func block(_ player: Player) {
+        attempt { try deps.point.recordBlock(in: point, by: player) }
     }
 
-    /// Log that we gave it away. They take possession.
-    func logOurTurnover(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard point.phase == .possession else { throw PointDetailError.invalidPoint }
-        guard point.holder != nil else { throw PointDetailError.missingPickup }
-        do {
-            let stat = point.makeStat(kind: .turnover)
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func ourTurnover() {
+        attempt { try deps.point.recordOurTurnover(in: point) }
     }
 
-    /// Log that they threw it away. The disc stays loose.
-    func logTheirTurnover(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard point.phase == .defense else { throw PointDetailError.invalidPoint }
-        do {
-            let stat = point.makeStat(kind: .turnover)
-            context.insert(stat)
-            point.stats.append(stat)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func theirTurnover() {
+        attempt { try deps.point.recordTheirTurnover(in: point) }
     }
 
-    /// Delete the last turnover to undo it. The phase follows the log.
-    func clearTurnover(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireActiveOffer(game, point: point)
-        guard let turnover = point.orderedStats.last(where: { $0.kind == .turnover }) else {
-            throw PointDetailError.invalidPoint
-        }
-        do {
-            deleteStat(turnover, from: point)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    // MARK: - Undo
+
+    func undoLastPass() {
+        attempt { try deps.point.undoLastPass(in: point) }
     }
 
-    /// Start a scheduled point. Locks in the 7-player line.
-    func startPull(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireBelongs(game, point: point)
-        guard point.status == .scheduled else { throw PointDetailError.notScheduledPoint }
-        let actives = activePoints(in: game)
-        guard actives.isEmpty else { throw PointDetailError.multipleActivePoints }
-        let opens = openPoints(in: game)
-        guard opens.count == 1, opens.first === point else { throw PointDetailError.invalidPoint }
-        guard point.line.count == PointLineViewModel.maxLineSize else {
-            throw PointDetailError.lineIncomplete(
-                current: point.line.count,
-                required: PointLineViewModel.maxLineSize
-            )
-        }
-        do {
-            if point.startingPosition == .defense {
-                guard let pull = pullStat(in: point), let puller = pull.player else {
-                    throw PointDetailError.missingPull
-                }
-                guard point.line.contains(where: { $0 === puller }) else {
-                    throw PointDetailError.notOnLine
-                }
-            } else {
-                _ = setStatPlayer(in: point, kind: .pull, to: nil)
-            }
-            point.status = .active
-            point.lineLocked = true
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func undoDrop() {
+        attempt { try deps.point.undoDrop(in: point) }
     }
 
-    /// Unlock the line on an active point so players can sub in.
-    /// The point stays active. No new pull is needed.
-    func unlockForSub(_ game: Game, point: Point) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        try requireBelongs(game, point: point)
-        guard point.status == .active else { throw PointDetailError.notActivePoint }
-        do {
-            point.lineLocked = false
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func undoBlock() {
+        attempt { try deps.point.undoBlock(in: point) }
     }
 
-    func completeActivePoint(_ game: Game, scoredBy: ScoringTeam) throws {
-        guard game.status == .live else { throw PointDetailError.notLive }
-        let active = activePoints(in: game)
-        guard active.count == 1, let point = active.first else {
-            if active.isEmpty { throw PointDetailError.noActivePoint }
-            throw PointDetailError.multipleActivePoints
-        }
-        guard point.game === game else { throw PointDetailError.detachedPoint }
-        guard point.line.count == PointLineViewModel.maxLineSize else {
-            throw PointDetailError.lineIncomplete(
-                current: point.line.count,
-                required: PointLineViewModel.maxLineSize
-            )
-        }
-        guard pullStat(in: point) != nil else { throw PointDetailError.missingPull }
-        do {
-            if scoredBy == .us {
-                guard let holder = point.holder else {
-                    throw PointDetailError.missingPickup
-                }
-                guard let goal = goalStat(in: point), let scorer = goal.player else {
-                    throw PointDetailError.missingScorer
-                }
-                guard scorer === holder else { throw PointDetailError.notHolder }
-                guard point.line.contains(where: { $0 === scorer }) else {
-                    throw PointDetailError.notOnLine
-                }
-            } else if let goal = goalStat(in: point) {
-                deleteStat(goal, from: point)
-            }
-            finishPoint(game, point: point, scoredBy: scoredBy)
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    func undoTurnover() {
+        attempt { try deps.point.undoLastTurnover(in: point) }
     }
 
-    private func finishPoint(_ game: Game, point: Point, scoredBy: ScoringTeam) {
-        point.scoredBy = scoredBy
-        point.status = .complete
-        point.lineLocked = true
-        if reachedTarget(game) {
-            game.status = .ended
-            return
-        }
-        insertHalftimeIfNeeded(in: game)
-        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-        let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-        _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
+    // MARK: - Result
+
+    /// Scores in one tap. Returns true when the screen can close.
+    @discardableResult
+    func score(_ player: Player) -> Bool {
+        attempt { try deps.point.scoreByPlayer(player, in: point) }
     }
 
-    private func insertHalftimeIfNeeded(in game: Game) {
-        guard game.halftime == nil else { return }
-        guard game.ourScore == game.halfTarget || game.theirScore == game.halfTarget else { return }
-        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-        insertHalftime(in: game, pointNumber: nextNumber)
-    }
-
-    private func reachedTarget(_ game: Game) -> Bool {
-        game.ourScore >= game.targetPoints || game.theirScore >= game.targetPoints
-    }
-
-    private func endLiveGame(_ game: Game) {
-        for open in openPoints(in: game) {
-            deletePoint(open, from: game)
-        }
-        game.status = .ended
-    }
-
-    private func reopenEndedGame(_ game: Game) {
-        game.status = .live
-        let nextNumber = (maxCompletedNumber(in: game) ?? 0) + 1
-        let side = sideForNextPoint(in: game, nextNumber: nextNumber)
-        _ = insertPoint(in: game, number: nextNumber, side: side, status: .scheduled)
-    }
-
-    func updatePointResult(_ game: Game, point: Point, scoredBy: ScoringTeam) throws {
-        guard game.status == .live || game.status == .ended else {
-            throw PointDetailError.notLive
-        }
-        guard point.status == .complete else { throw PointDetailError.invalidPoint }
-        try requireBelongs(game, point: point)
-        if point.scoredBy == scoredBy { return }
-        do {
-            point.scoredBy = scoredBy
-            if scoredBy == .them, let goal = goalStat(in: point) {
-                deleteStat(goal, from: point)
-            }
-            insertHalftimeIfNeeded(in: game)
-            let done = reachedTarget(game)
-            if game.status == .live && done {
-                endLiveGame(game)
-                try save()
-                return
-            }
-            if game.status == .ended && !done {
-                reopenEndedGame(game)
-            }
-            if let active = game.currentPoint {
-                active.startingPosition = sideForNextPoint(in: game, nextNumber: active.number)
-            }
-            try save()
-        } catch let error as PointDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw PointDetailError.saveFailed(underlying: error)
-        }
+    /// Records the winner. Returns true when the screen can close.
+    @discardableResult
+    func record(_ team: ScoringTeam) -> Bool {
+        attempt { try deps.point.recordScore(of: point, in: game, scoredBy: team) }
     }
 }

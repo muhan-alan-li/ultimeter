@@ -10,20 +10,13 @@ import SwiftData
 
 /// The landing page. Lists all teams stored on the device.
 struct TeamListView: View {
-    @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\Team.name, comparator: .localizedStandard)])
     private var teams: [Team]
 
-    @State private var viewModel: TeamListViewModel
-
-    init(context: ModelContext) {
-        _viewModel = State(initialValue: TeamListViewModel(context: context))
-    }
-
+    @State private var model = TeamListViewModel()
     @State private var showingCreateForm = false
     @State private var teamToEdit: Team?
     @State private var teamToDelete: Team?
-    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -45,10 +38,10 @@ struct TeamListView: View {
                 }
             }
             .sheet(isPresented: $showingCreateForm) {
-                TeamFormView(context: modelContext)
+                TeamFormView()
             }
             .sheet(item: $teamToEdit) { team in
-                TeamFormView(context: modelContext, team: team)
+                TeamFormView(team: team)
             }
             .confirmationDialog(
                 "Delete \(teamToDelete?.name ?? "this team")?",
@@ -63,14 +56,8 @@ struct TeamListView: View {
                     delete(team)
                 }
             }
-            .alert("Delete Failed", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "The team could not be deleted. Try again.")
-            }
+            .connect(model)
+            .errorAlert($model.error)
         }
     }
 
@@ -91,7 +78,7 @@ struct TeamListView: View {
         List {
             ForEach(teams) { team in
                 NavigationLink {
-                    TeamDetailView(context: modelContext, team: team)
+                    TeamDetailView(team: team)
                 } label: {
                     TeamRowView(team: team)
                 }
@@ -114,37 +101,14 @@ struct TeamListView: View {
 
     private func delete(_ team: Team) {
         withAnimation {
-            do {
-                try viewModel.deleteTeam(team)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-}
-
-/// A single row in the team list.
-struct TeamRowView: View {
-    let team: Team
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(team.name)
-                .font(.headline)
-            Text(team.division.displayName)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            model.delete(team)
         }
     }
 }
 
 #Preview {
-    guard let container = try? ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
-        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    ) else {
-        fatalError("Preview container failed")
-    }
-    return TeamListView(context: container.mainContext)
+    let container = AppSchema.previewContainer()
+    TeamListView()
+        .environment(AppDependencies(container: container))
         .modelContainer(container)
 }

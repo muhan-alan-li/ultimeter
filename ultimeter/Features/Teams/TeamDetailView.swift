@@ -16,23 +16,16 @@ enum TeamDetailTab: String, CaseIterable, Identifiable {
 
 /// Shows the roster or the game history of a team.
 struct TeamDetailView: View {
-    @Environment(\.modelContext) private var modelContext
     let team: Team
 
-    @State private var viewModel: TeamDetailViewModel
-
-    init(context: ModelContext, team: Team) {
-        self.team = team
-        _viewModel = State(initialValue: TeamDetailViewModel(context: context))
-    }
-
+    @State private var model: TeamDetailViewModel
     @State private var selectedTab: TeamDetailTab = .roster
     @State private var showingNewPlayer = false
     @State private var showingAddExisting = false
-    @State private var errorMessage: String?
 
-    private var players: [Player] {
-        team.players.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    init(team: Team) {
+        self.team = team
+        _model = State(initialValue: TeamDetailViewModel(team: team))
     }
 
     var body: some View {
@@ -50,7 +43,7 @@ struct TeamDetailView: View {
             case .roster:
                 rosterTab
             case .games:
-                GameListView(context: modelContext, team: team)
+                GameListView(team: team)
             }
         }
         .navigationTitle(team.name)
@@ -72,29 +65,21 @@ struct TeamDetailView: View {
             }
         }
         .sheet(isPresented: $showingNewPlayer) {
-            PlayerFormView(context: modelContext, team: team)
+            PlayerFormView(team: team)
         }
         .sheet(isPresented: $showingAddExisting) {
-            AddExistingPlayerView(context: modelContext, team: team)
+            AddExistingPlayerView(team: team)
         }
-        .alert("Update Failed", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "The roster could not be updated. Try again.")
-        }
+        .connect(model)
+        .errorAlert($model.error)
     }
 
     @ViewBuilder
     private var rosterTab: some View {
-        Group {
-            if team.players.isEmpty {
-                emptyState
-            } else {
-                playerList
-            }
+        if model.roster.isEmpty {
+            emptyState
+        } else {
+            playerList
         }
     }
 
@@ -108,7 +93,7 @@ struct TeamDetailView: View {
 
     private var playerList: some View {
         List {
-            ForEach(players) { player in
+            ForEach(model.roster) { player in
                 HStack {
                     Text(player.name)
                     Spacer()
@@ -116,32 +101,18 @@ struct TeamDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .onDelete { indexSet in
-                deletePlayers(at: indexSet)
-            }
-        }
-    }
-
-    private func deletePlayers(at offsets: IndexSet) {
-        for offset in offsets {
-            do {
-                try viewModel.removePlayer(players[offset], from: team)
-            } catch {
-                errorMessage = error.localizedDescription
+            .onDelete { offsets in
+                model.remove(at: offsets)
             }
         }
     }
 }
 
 #Preview {
-    guard let container = try? ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
-        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    ) else {
-        fatalError("Preview container failed")
+    let container = AppSchema.previewContainer()
+    NavigationStack {
+        TeamDetailView(team: Team(name: "Example Team", division: .mixed))
     }
-    return NavigationStack {
-        TeamDetailView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
-    }
+    .environment(AppDependencies(container: container))
     .modelContainer(container)
 }

@@ -46,10 +46,10 @@ enum PointOutcome {
     /// The display label for this outcome.
     var label: String {
         switch self {
-            case .weHold: "We hold"
-            case .weBreak: "We break"
-            case .theyHold: "They hold"
-            case .theyBreak: "They break"
+        case .weHold: "We hold"
+        case .weBreak: "We break"
+        case .theyHold: "They hold"
+        case .theyBreak: "They break"
         }
     }
 }
@@ -90,30 +90,7 @@ final class Point {
     /// A turnover while they hold leaves it loose.
     /// A block leaves it loose with credit.
     var phase: PossessionState {
-        guard status == .active else { return .none }
-        var phase: PossessionState =
-            startingPosition == .offense ? .awaitingPickup : .defense
-        for stat in orderedStats {
-            switch stat.kind {
-            case .pull, .goal, .pass:
-                break
-            case .block:
-                if phase == .defense { phase = .awaitingPickup }
-            case .pickup:
-                if phase == .awaitingPickup || phase == .possession {
-                    phase = .possession
-                }
-            case .turnover:
-                if phase == .possession {
-                    phase = .defense
-                } else if phase == .defense {
-                    phase = .awaitingPickup
-                }
-            case .drop:
-                if phase == .possession { phase = .defense }
-            }
-        }
-        return phase
+        PointFold.phase(status: status, start: startingPosition, events: events)
     }
 
     /// Event log for this point. Mirrors how a game holds points.
@@ -127,51 +104,49 @@ final class Point {
         stats.sorted { $0.sequence < $1.sequence }
     }
 
+    /// The event log reduced to the values the folds need.
+    var events: [PointEvent] {
+        orderedStats.map {
+            PointEvent(kind: $0.kind, player: $0.player, relatedPlayer: $0.relatedPlayer)
+        }
+    }
+
     /// Our puller, if we pulled this point.
     var puller: Player? {
-        orderedStats.first { $0.kind == .pull }?.player
+        PointFold.puller(events)
+    }
+
+    /// Whether the point has a pull. Our own offense points have a pull
+    /// with no player, because they pulled.
+    var hasPull: Bool {
+        PointFold.hasPull(events)
     }
 
     /// Our blockers in order. Stacks over stands.
     var blockers: [Player] {
-        orderedStats.filter { $0.kind == .block }.compactMap(\.player)
+        PointFold.blockers(events)
     }
 
     /// The player holding the disc, if we hold it.
     /// Folds the log in order. Each turnover resets possession.
     /// Uses the last pass receiver since then, else the pickup player.
     var holder: Player? {
-        var pickup: Player?
-        var receiver: Player?
-        for stat in orderedStats {
-            switch stat.kind {
-            case .turnover, .drop:
-                pickup = nil
-                receiver = nil
-            case .pickup:
-                pickup = stat.player
-            case .pass:
-                receiver = stat.relatedPlayer
-            default:
-                break
-            }
-        }
-        return receiver ?? pickup
+        PointFold.holder(events)
     }
 
     /// Count of passes logged on this point.
     var passCount: Int {
-        orderedStats.filter { $0.kind == .pass }.count
+        PointFold.passCount(events)
     }
 
     /// Count of drops logged on this point.
     var dropCount: Int {
-        orderedStats.filter { $0.kind == .drop }.count
+        PointFold.dropCount(events)
     }
 
     /// Our scorer, if we scored this point.
     var scorer: Player? {
-        orderedStats.first { $0.kind == .goal }?.player
+        PointFold.scorer(events)
     }
 
     /// Build the next stat and advance the sequence counter.
@@ -184,17 +159,11 @@ final class Point {
 
     /// The outcome of this point, if it is complete.
     var outcome: PointOutcome? {
-        guard status == .complete, let scoredBy else { return nil }
-        switch (startingPosition, scoredBy) {
-            case (.offense, .us):
-                return .weHold
-            case (.defense, .us):
-                return .weBreak
-            case (.offense, .them):
-                return .theyBreak
-            case (.defense, .them):
-                return .theyHold
-        }
+        PointFold.outcome(
+            status: status,
+            scoredBy: scoredBy,
+            start: startingPosition
+        )
     }
 
     init(

@@ -4,46 +4,31 @@
 //
 
 import Foundation
-import SwiftData
+import Observation
 
-/// Errors thrown by the add-existing-player screen.
-enum AddExistingPlayerError: Error, LocalizedError {
-    case saveFailed(underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .saveFailed(let underlying):
-            "The player could not be added. \(underlying.localizedDescription)"
-        }
-    }
-}
-
-/// View model for `AddExistingPlayerView`. Owns existing-player adds.
+/// The view model of the add-existing-player screen.
 @Observable
 @MainActor
-final class AddExistingPlayerViewModel {
-    private let context: ModelContext
+final class AddExistingPlayerViewModel: ScreenModel {
+    @ObservationIgnored var dependencies: AppDependencies?
+    var error: AppError?
 
-    init(context: ModelContext) {
-        self.context = context
+    private let team: Team
+
+    init(team: Team) {
+        self.team = team
     }
 
-    private func save() throws {
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
+    /// The players who are not on the team yet.
+    func available(in players: [Player]) -> [Player] {
+        players.filter { player in
+            !player.teams.contains { $0 === team }
         }
     }
 
-    func add(_ player: Player, to team: Team) throws {
-        guard !team.players.contains(where: { $0 === player }) else { return }
-        team.players.append(player)
-        do {
-            try save()
-        } catch {
-            throw AddExistingPlayerError.saveFailed(underlying: error)
-        }
+    /// Adds one player to the team. Returns true on success.
+    @discardableResult
+    func add(_ player: Player) -> Bool {
+        attempt { try deps.team.addExisting(player, to: team) }
     }
 }

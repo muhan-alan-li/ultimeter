@@ -4,45 +4,17 @@
 //
 
 import Foundation
-import SwiftData
+import Observation
 
-/// Errors thrown by the team list screen.
-enum TeamListError: Error, LocalizedError {
-    case deleteFailed(underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .deleteFailed(let underlying):
-            "The team could not be deleted. \(underlying.localizedDescription)"
-        }
-    }
-}
-
-/// View model for `TeamListView`. Owns team deletion.
+/// The view model of the team list screen.
 @Observable
 @MainActor
-final class TeamListViewModel {
-    private let context: ModelContext
+final class TeamListViewModel: ScreenModel {
+    @ObservationIgnored var dependencies: AppDependencies?
+    var error: AppError?
 
-    init(context: ModelContext) {
-        self.context = context
-    }
-
-    private func save() throws {
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
-        }
-    }
-
-    func deleteTeam(_ team: Team) throws {
-        context.delete(team)
-        do {
-            try save()
-        } catch {
-            throw TeamListError.deleteFailed(underlying: error)
-        }
+    /// Deletes one team and its games.
+    func delete(_ team: Team) {
+        attempt { try deps.team.delete(team) }
     }
 }

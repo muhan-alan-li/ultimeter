@@ -12,44 +12,46 @@ struct GameFormView: View {
     @Query private var allTournaments: [Tournament]
     @Query private var allOpponents: [Opponent]
 
-    @State private var viewModel: GameFormViewModel
+    @State private var model: GameFormViewModel
 
-    init(context: ModelContext, team: Team, game: Game? = nil) {
-        _viewModel = State(initialValue: GameFormViewModel(context: context, team: team, game: game))
+    init(team: Team, game: Game? = nil) {
+        _model = State(initialValue: GameFormViewModel(team: team, game: game))
     }
-
-    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Game") {
-                    DatePicker("Date", selection: $viewModel.date, displayedComponents: .date)
+                    DatePicker("Date", selection: $model.draft.date, displayedComponents: .date)
                     SuggestingPicker(
                         title: "Opponent Name",
-                        text: $viewModel.opponentName,
+                        text: $model.draft.opponentName,
                         values: allOpponents.map(\.name)
                     )
                 }
                 Section("Setup") {
-                    Stepper("Target: \(viewModel.targetPoints)", value: $viewModel.targetPoints, in: Game.validTargetRange)
-                    .disabled(!viewModel.isSetupEditable)
-                    Picker("Starting Position", selection: $viewModel.startingPosition) {
+                    Stepper(
+                        "Target: \(model.draft.targetPoints)",
+                        value: $model.draft.targetPoints,
+                        in: Game.validTargetRange
+                    )
+                    .disabled(!model.isSetupEditable)
+                    Picker("Starting Position", selection: $model.draft.startingPosition) {
                         Text("Offense").tag(StartingPosition.offense)
                         Text("Defense").tag(StartingPosition.defense)
                     }
                     .pickerStyle(.segmented)
-                    .disabled(!viewModel.isSetupEditable)
+                    .disabled(!model.isSetupEditable)
                 }
                 Section("Tournament") {
                     SuggestingPicker(
                         title: "Tournament (blank for standalone)",
-                        text: $viewModel.tournamentName,
+                        text: $model.draft.tournamentName,
                         values: allTournaments.map(\.name)
                     )
                 }
             }
-            .navigationTitle(viewModel.isEditing ? "Edit Game" : "New Game")
+            .navigationTitle(model.isEditing ? "Edit Game" : "New Game")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -61,51 +63,33 @@ struct GameFormView: View {
                     Button("Save") {
                         save()
                     }
-                    .disabled(viewModel.trimmedOpponentName.isEmpty)
+                    .disabled(!model.canSave)
                 }
             }
-            .alert("Save Failed", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "The game could not be saved. Try again.")
-            }
+            .connect(model)
+            .errorAlert($model.error)
         }
     }
 
     private func save() {
-        do {
-            try viewModel.saveGame()
-        } catch {
-            errorMessage = error.localizedDescription
-            return
+        if model.save() {
+            dismiss()
         }
-        dismiss()
     }
 }
 
 #Preview("New Game") {
-    guard let container = try? ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
-        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    ) else {
-        fatalError("Preview container failed")
-    }
-    return GameFormView(context: container.mainContext, team: Team(name: "Example Team", division: .mixed))
+    let container = AppSchema.previewContainer()
+    GameFormView(team: Team(name: "Example Team", division: .mixed))
+        .environment(AppDependencies(container: container))
         .modelContainer(container)
 }
 
 #Preview("Edit Game") {
-    guard let container = try? ModelContainer(
-        for: Schema([Team.self, Player.self, Game.self, Opponent.self, Tournament.self, Point.self, Halftime.self]),
-        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-    ) else {
-        fatalError("Preview container failed")
-    }
+    let container = AppSchema.previewContainer()
     let team = Team(name: "Example Team", division: .mixed)
     let game = Game(date: .now, team: team, opponent: Opponent(name: "Rivals"))
-    return GameFormView(context: container.mainContext, team: team, game: game)
+    return GameFormView(team: team, game: game)
+        .environment(AppDependencies(container: container))
         .modelContainer(container)
 }

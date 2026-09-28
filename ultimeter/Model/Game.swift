@@ -42,23 +42,23 @@ final class Game {
     var date: Date
     var team: Team
     var opponent: Opponent
-    
+
     @Relationship(inverse: \Tournament.games)
     var tournament: Tournament?
-    
+
     var targetPoints: Int = 15
     var startingPosition: StartingPosition = StartingPosition.offense
     var status: GameStatus = GameStatus.scheduled
 
     /// Score that triggers halftime. Frozen at game start so cap changes never move it.
     var halftimeTarget: Int?
-    
+
     @Relationship(deleteRule: .cascade, inverse: \Point.game)
     var points: [Point] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \Halftime.game)
     var halftime: Halftime?
-    
+
     var nextSequence: Int = 0
 
     static let validTargetRange = 1 ... 21
@@ -119,7 +119,22 @@ final class Game {
     /// Half target with integer division.
     /// Uses the frozen start-of-game value so cap changes never move halftime.
     var halfTarget: Int {
-        halftimeTarget ?? (targetPoints + 1) / 2
+        GameProgress.halfTarget(of: self)
+    }
+
+    /// The number of the next point.
+    var nextPointNumber: Int {
+        GameProgress.nextPointNumber(in: self)
+    }
+
+    /// The side that starts the next point.
+    var sideForNextPoint: StartingPosition {
+        GameProgress.side(forNextPointIn: self)
+    }
+
+    /// Whether a score reached the game target.
+    var reachedTarget: Bool {
+        GameProgress.reachedTarget(self)
     }
 
     /// Build the next point and advance the sequence counter.

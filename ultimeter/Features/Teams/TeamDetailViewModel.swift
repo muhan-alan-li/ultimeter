@@ -4,46 +4,32 @@
 //
 
 import Foundation
-import SwiftData
+import Observation
 
-/// Errors thrown by the team detail screen.
-enum TeamDetailError: Error, LocalizedError {
-    case removeFailed(underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .removeFailed(let underlying):
-            "The roster could not be updated. \(underlying.localizedDescription)"
-        }
-    }
-}
-
-/// View model for `TeamDetailView`. Owns roster removal.
+/// The view model of the team detail screen. Owns the roster.
 @Observable
 @MainActor
-final class TeamDetailViewModel {
-    private let context: ModelContext
+final class TeamDetailViewModel: ScreenModel {
+    @ObservationIgnored var dependencies: AppDependencies?
+    var error: AppError?
 
-    init(context: ModelContext) {
-        self.context = context
+    private let team: Team
+
+    init(team: Team) {
+        self.team = team
     }
 
-    private func save() throws {
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
+    /// The roster sorted by name.
+    var roster: [Player] {
+        team.players.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
 
-    func removePlayer(_ player: Player, from team: Team) throws {
-        guard team.players.contains(where: { $0 === player }) else { return }
-        team.players.removeAll { $0 === player }
-        do {
-            try save()
-        } catch {
-            throw TeamDetailError.removeFailed(underlying: error)
+    /// Removes the players at the given rows.
+    func remove(at offsets: IndexSet) {
+        for player in offsets.map({ roster[$0] }) {
+            attempt { try deps.team.remove(player, from: team) }
         }
     }
 }

@@ -9,119 +9,41 @@ import SwiftData
 /// History of points in play order with a halftime divider.
 /// Shows the latest points with an option to expand the full history.
 struct PointListView: View {
-    @Environment(\.modelContext) private var modelContext
-    let game: Game
+    @State private var model: PointListViewModel
 
-    @State private var showAllPoints = false
-
-    /// Number of recent points shown while collapsed.
-    private let collapsedLimit = 3
-
-    private struct RowScore {
-        let point: Point
-        let ourTotal: Int
-        let theirTotal: Int
-    }
-
-    private var scoredRows: [RowScore] {
-        var our = 0
-        var their = 0
-        return game.orderedPoints.map { point in
-            if point.status == .complete {
-                if point.scoredBy == .us {
-                    our += 1
-                } else if point.scoredBy == .them {
-                    their += 1
-                }
-            }
-            return RowScore(point: point, ourTotal: our, theirTotal: their)
-        }
-    }
-
-    private var preHalfRows: [RowScore] {
-        guard let halfNumber = game.halfPointNumber else { return scoredRows }
-        return scoredRows.filter { $0.point.number < halfNumber }
-    }
-
-    private var postHalfRows: [RowScore] {
-        guard let halfNumber = game.halfPointNumber else { return [] }
-        return scoredRows.filter { $0.point.number >= halfNumber }
-    }
-
-    /// The latest points shown while collapsed, in play order.
-    private var collapsedRows: [RowScore] {
-        Array(scoredRows.suffix(collapsedLimit))
-    }
-
-    private var needsExpandControl: Bool {
-        scoredRows.count > collapsedLimit
-    }
-
-    /// Whether the collapsed rows span halftime and need the divider.
-    private var collapsedSpansHalftime: Bool {
-        guard let halfNumber = game.halfPointNumber else { return false }
-        let numbers = collapsedRows.map(\.point.number)
-        guard let first = numbers.min(), let last = numbers.max() else { return false }
-        return first < halfNumber && last >= halfNumber
-    }
-
-    private func accessibilityText(for row: RowScore) -> String {
-        let side = row.point.startingPosition == .offense ? "offense" : "defense"
-        let score = "\(row.ourTotal) to \(row.theirTotal)"
-        if row.point.status == .scheduled {
-            return "Point \(row.point.number), \(side), scheduled, score \(score)"
-        }
-        if row.point.status == .active {
-            return "Point \(row.point.number), \(side), live, score \(score)"
-        }
-        if let outcome = row.point.outcome {
-            return "Point \(row.point.number), \(side), \(outcome.label), score \(score)"
-        }
-        return "Point \(row.point.number), \(side), no result, score \(score)"
+    init(game: Game) {
+        _model = State(initialValue: PointListViewModel(game: game))
     }
 
     var body: some View {
-        if needsExpandControl {
-            Button {
-                withAnimation {
-                    showAllPoints.toggle()
-                }
-            } label: {
-                Label(
-                    showAllPoints ? "Show fewer points" : "Show all \(scoredRows.count) points",
-                    systemImage: showAllPoints ? "chevron.up" : "chevron.down"
-                )
-            }
-        }
-        if game.orderedPoints.isEmpty {
+        if model.isEmpty {
             Text("No points yet.")
                 .foregroundStyle(.secondary)
-        } else if showAllPoints || !needsExpandControl {
-            if game.halftime == nil {
-                ForEach(scoredRows, id: \.point.id) { row in
-                    pointRow(row)
-                }
-            } else {
-                ForEach(preHalfRows, id: \.point.id) { row in
-                    pointRow(row)
-                }
-                halftimeLabel
-                ForEach(postHalfRows, id: \.point.id) { row in
-                    pointRow(row)
-                }
-            }
-        } else if let halfNumber = game.halfPointNumber, collapsedSpansHalftime {
-            ForEach(collapsedRows.filter { $0.point.number < halfNumber }, id: \.point.id) { row in
-                pointRow(row)
-            }
-            halftimeLabel
-            ForEach(collapsedRows.filter { $0.point.number >= halfNumber }, id: \.point.id) { row in
-                pointRow(row)
-            }
         } else {
-            ForEach(collapsedRows, id: \.point.id) { row in
-                pointRow(row)
+            if model.needsExpandControl {
+                expandControl
             }
+            ForEach(model.entries) { entry in
+                switch entry {
+                case .row(let row):
+                    pointRow(row)
+                case .halftime:
+                    halftimeLabel
+                }
+            }
+        }
+    }
+
+    private var expandControl: some View {
+        Button {
+            withAnimation {
+                model.toggleExpanded()
+            }
+        } label: {
+            Label(
+                model.expandLabel,
+                systemImage: model.isExpanded ? "chevron.up" : "chevron.down"
+            )
         }
     }
 
@@ -135,45 +57,54 @@ struct PointListView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func pointRow(_ row: RowScore) -> some View {
+    private func pointRow(_ row: PointListViewModel.Row) -> some View {
         NavigationLink {
-            PointDetailView(context: modelContext, game: game, point: row.point)
+            PointDetailView(game: model.game, point: row.point)
         } label: {
             HStack(spacing: 12) {
-                Text(row.point.startingPosition == .offense ? "O" : "D")
+                Text(row.startsOnOffense ? "O" : "D")
                     .font(.headline)
                     .foregroundStyle(.secondary)
-                if let outcome = row.point.outcome {
+                if let outcome = row.outcome {
                     Text(outcome.label)
                         .font(.subheadline)
-                        .foregroundStyle(row.point.scoredBy == .us ? .green : .red)
+                        .foregroundStyle(row.scoredBy == .us ? .green : .red)
                         .fontWeight(.medium)
                 }
                 Spacer()
                 Text("\(row.ourTotal) - \(row.theirTotal)")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                if row.point.status == .scheduled {
-                    Text("Scheduled")
+                if let badge = model.badge(for: row) {
+                    Text(badge.text)
                         .font(.caption)
                         .fontWeight(.bold)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(.secondary.opacity(0.15))
-                        .clipShape(.capsule)
-                }
-                if row.point.status == .active {
-                    Text("Live")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(.blue.opacity(0.15))
-                        .clipShape(.capsule)
+                        .background(badgeColor(badge), in: Capsule())
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityText(for: row))
+            .accessibilityLabel(model.accessibilityText(for: row))
         }
     }
+
+    /// The badge background of one status. The view maps a state to a look.
+    private func badgeColor(_ badge: PointListViewModel.Badge) -> Color {
+        switch badge {
+        case .scheduled: .secondary.opacity(0.15)
+        case .live: .blue.opacity(0.15)
+        }
+    }
+}
+
+#Preview {
+    let container = AppSchema.previewContainer()
+    let team = Team(name: "Example Team", division: .mixed)
+    let game = Game(date: .now, team: team, opponent: Opponent(name: "Rivals"))
+    return List {
+        PointListView(game: game)
+    }
+    .environment(AppDependencies(container: container))
+    .modelContainer(container)
 }

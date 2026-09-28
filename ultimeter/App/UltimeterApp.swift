@@ -10,29 +10,12 @@ import SwiftData
 
 @main
 struct UltimeterApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Team.self,
-            Player.self,
-            Game.self,
-            Opponent.self,
-            Tournament.self,
-            Point.self,
-            Halftime.self
-        ])
-        let storeURL = URL.applicationSupportDirectory.appending(path: "ultimeter.store")
-        let modelConfiguration = ModelConfiguration(schema: schema, url: storeURL)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    var sharedModelContainer: ModelContainer = AppSchema.container()
 
     var body: some Scene {
         WindowGroup {
-            TeamListView(context: sharedModelContainer.mainContext)
+            TeamListView()
+                .environment(AppDependencies(container: sharedModelContainer))
         }
         .modelContainer(sharedModelContainer)
     }

@@ -1,5 +1,8 @@
 # Arch Review
 
+NOTE: Implemented by `plan-rearch.md`. The app keeps MVVM. The four valid
+findings are fixed. The recommendation to remove the view models is not used.
+
 ## Findings
 
 Observe that ViewModels hold no state.

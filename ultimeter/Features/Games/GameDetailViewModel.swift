@@ -4,150 +4,125 @@
 //
 
 import Foundation
-import SwiftData
+import Observation
 
-/// Errors thrown by the game detail screen.
-enum GameDetailError: Error, LocalizedError {
-    case notScheduled
-    case alreadyStarted
-    case notLive
-    case invalidScore
-    case finalScoreBelowCurrent
-    case invalidTarget(Int)
-    case saveFailed(underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .notScheduled:
-            "The game is not scheduled. This action is not allowed."
-        case .alreadyStarted:
-            "The game already started. This action is not allowed."
-        case .notLive:
-            "The game is not live. This action is not allowed."
-        case .invalidScore:
-            "Invalid score. Scores must be zero or higher."
-        case .finalScoreBelowCurrent:
-            "Invalid final score. Final score cannot be below the current score."
-        case .invalidTarget(let target):
-            "Invalid target \(target). Choose a value from 1 to 21."
-        case .saveFailed(let underlying):
-            "The game could not be updated. \(underlying.localizedDescription)"
-        }
-    }
-}
-
-/// View model for `GameDetailView`. Owns game start.
+/// The view model of the game detail screen. Owns the score header,
+/// the game controls, and the values of the two sheets.
 @Observable
 @MainActor
-final class GameDetailViewModel {
-    private let context: ModelContext
+final class GameDetailViewModel: ScreenModel {
+    @ObservationIgnored var dependencies: AppDependencies?
+    var error: AppError?
 
-    init(context: ModelContext) {
-        self.context = context
+    /// The game of this screen.
+    let game: Game
+
+    /// The final score entered on the End Game sheet.
+    var endOurScore = 0
+    var endTheirScore = 0
+
+    /// The point cap entered on the Set Cap sheet.
+    var newCap = 15
+
+    init(game: Game) {
+        self.game = game
+        newCap = Game.validTargetRange.lowerBound
     }
 
-    private func save() throws {
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
+    // MARK: - Display
+
+    var title: String { "\(game.team.name) vs \(game.opponent.name)" }
+
+    var scoreText: String { "\(game.ourScore) - \(game.theirScore)" }
+
+    var targetText: String { "Target \(game.targetPoints)" }
+
+    var startingText: String {
+        "We started on \(game.startingPosition.displayName)"
+    }
+
+    // MARK: - Additional info
+
+    var date: Date { game.date }
+
+    var tournamentName: String { game.tournament?.name ?? "Standalone" }
+
+    var teamName: String { game.team.name }
+
+    var opponentName: String { game.opponent.name }
+
+    var targetPoints: Int { game.targetPoints }
+
+    var startingPositionName: String { game.startingPosition.displayName }
+
+    var statusName: String { game.status.displayName }
+
+    /// The hint under the final score fields.
+    var endGameHint: String {
+        "Keep the scores to end with the current result. "
+            + "Increase them to add missing points for a new final score."
+    }
+
+    var halfText: String? {
+        guard let number = game.halfPointNumber else { return nil }
+        return "Half at point \(number)"
+    }
+
+    var isEnded: Bool { game.status == .ended }
+
+    // MARK: - Controls
+
+    /// The Start Game control shows on a game that did not start.
+    var canStart: Bool { game.status == .scheduled && game.points.isEmpty }
+
+    /// The End Game control shows on a live game.
+    var canEnd: Bool { game.status == .live }
+
+    /// The lowest cap that allows the game to continue.
+    var capLowerBound: Int { GameProgress.capLowerBound(of: game) }
+
+    /// The Set Cap control shows when a higher cap is still possible.
+    var canSetCap: Bool {
+        canEnd && capLowerBound <= Game.validTargetRange.upperBound
+    }
+
+    // MARK: - Intents
+
+    /// Starts the game.
+    @discardableResult
+    func start() -> Bool {
+        attempt { try deps.game.start(game) }
+    }
+
+    /// Prepares the End Game sheet from the current score.
+    func prepareEndGame() {
+        endOurScore = game.ourScore
+        endTheirScore = game.theirScore
+    }
+
+    /// Ends the game with the entered final score.
+    @discardableResult
+    func end() -> Bool {
+        attempt {
+            try deps.game.end(
+                game,
+                ourScore: endOurScore,
+                theirScore: endTheirScore
+            )
         }
     }
 
-    func startGame(_ game: Game) throws {
-        guard game.status == .scheduled else { throw GameDetailError.notScheduled }
-        guard game.points.isEmpty else { throw GameDetailError.alreadyStarted }
-        guard Game.validTargetRange.contains(game.targetPoints) else {
-            throw GameDetailError.invalidTarget(game.targetPoints)
-        }
-        do {
-            game.halftimeTarget = (game.targetPoints + 1) / 2
-            let point = game.makePoint(number: 1, side: game.startingPosition, status: .scheduled)
-            context.insert(point)
-            game.points.append(point)
-            game.status = .live
-            try save()
-        } catch let error as GameDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
+    /// Prepares the Set Cap sheet from the current cap.
+    func prepareCap() {
+        newCap = min(
+            max(game.targetPoints, capLowerBound),
+            Game.validTargetRange.upperBound
+        )
     }
 
-    func setPointCap(_ game: Game, to newCap: Int) throws {
-        guard game.status == .live else { throw GameDetailError.notLive }
-        let minimum = max(game.ourScore, game.theirScore) + 1
-        guard (minimum ... Game.validTargetRange.upperBound).contains(newCap) else {
-            throw GameDetailError.invalidTarget(newCap)
-        }
-        do {
-            game.targetPoints = newCap
-            try save()
-        } catch let error as GameDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
-    }
-
-    func endGame(_ game: Game, ourScore: Int, theirScore: Int) throws {
-        guard game.status == .live else { throw GameDetailError.notLive }
-        guard ourScore >= 0 && theirScore >= 0 else { throw GameDetailError.invalidScore }
-        guard ourScore >= game.ourScore && theirScore >= game.theirScore else {
-            throw GameDetailError.finalScoreBelowCurrent
-        }
-        do {
-            let opens = game.points.filter { $0.status != .complete }
-            for open in opens {
-                game.points.removeAll { $0 === open }
-                context.delete(open)
-            }
-            if ourScore == game.ourScore && theirScore == game.theirScore {
-                game.status = .ended
-                try save()
-                return
-            }
-            let additionalUs = ourScore - game.ourScore
-            let additionalThem = theirScore - game.theirScore
-            var number = (game.points.filter { $0.status == .complete }.map(\.number).max() ?? 0) + 1
-            for _ in 0 ..< additionalUs {
-                let point = game.makePoint(number: number, side: sideForNextPoint(in: game), status: .complete)
-                point.scoredBy = .us
-                context.insert(point)
-                game.points.append(point)
-                number += 1
-            }
-            for _ in 0 ..< additionalThem {
-                let point = game.makePoint(number: number, side: sideForNextPoint(in: game), status: .complete)
-                point.scoredBy = .them
-                context.insert(point)
-                game.points.append(point)
-                number += 1
-            }
-            game.status = .ended
-            try save()
-        } catch let error as GameDetailError {
-            throw error
-        } catch {
-            context.rollback()
-            throw GameDetailError.saveFailed(underlying: error)
-        }
-    }
-
-    private func sideForNextPoint(in game: Game) -> StartingPosition {
-        if let last = game.points.filter({ $0.status == .complete }).max(by: { $0.number < $1.number }) {
-            switch last.scoredBy {
-            case .us:
-                return .defense
-            case .them:
-                return .offense
-            case nil:
-                return game.startingPosition
-            }
-        }
-        return game.startingPosition
+    /// Saves the entered cap.
+    @discardableResult
+    func saveCap() -> Bool {
+        attempt { try deps.game.setCap(game, to: newCap) }
     }
 }
