@@ -81,9 +81,9 @@ final class PointDetailViewModel: ScreenModel {
         return point.scoredBy == .them ? "No scorer" : "Not set"
     }
 
-    /// The text of a line problem.
-    func text(for problem: LineProblem) -> String {
-        switch problem {
+    /// The text of a line issue.
+    func text(for issue: LineIssue) -> String {
+        switch issue {
         case .incomplete(let current, let required):
             return "Line has \(current) of \(required). Complete the sub to continue."
         case .rosterTooSmall(let have, let required):
@@ -150,20 +150,8 @@ final class PointDetailViewModel: ScreenModel {
 
     // MARK: - Undo
 
-    func undoLastPass() {
-        attempt { try deps.point.undoLastPass(in: point) }
-    }
-
-    func undoDrop() {
-        attempt { try deps.point.undoDrop(in: point) }
-    }
-
-    func undoBlock() {
-        attempt { try deps.point.undoBlock(in: point) }
-    }
-
-    func undoTurnover() {
-        attempt { try deps.point.undoLastTurnover(in: point) }
+    func undoLastEvent() {
+        attempt { try deps.point.undoLastEvent(in: point) }
     }
 
     // MARK: - Result

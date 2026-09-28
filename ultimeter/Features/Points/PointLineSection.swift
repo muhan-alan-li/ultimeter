@@ -17,8 +17,8 @@ struct PointLineSection: View {
 
     var body: some View {
         Section("Line (\(model.lineCountText))") {
-            if let problem = offer.lineProblem {
-                Text(model.text(for: problem))
+            if let issue = offer.lineIssue {
+                Text(model.text(for: issue))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

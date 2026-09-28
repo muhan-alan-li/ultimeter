@@ -165,8 +165,11 @@ final class SwiftDataGameRepository: GameRepository {
     private func appendScoredPoint(to game: Game, number: Int, scoredBy: ScoringTeam) {
         let side = GameProgress.side(ofPoint: number, in: game)
         let point = game.makePoint(number: number, side: side, status: .complete)
-        point.scoredBy = scoredBy
+        let score = point.makeEvent(kind: .score)
+        score.scoringTeam = scoredBy
         context.insert(point)
+        context.insert(score)
+        point.events.append(score)
         game.points.append(point)
     }
 }

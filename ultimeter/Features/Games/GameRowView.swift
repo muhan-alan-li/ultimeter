@@ -79,15 +79,20 @@ struct GameRowView: View {
     func scoredPoints(won: Int, lost: Int) -> [Point] {
         var result: [Point] = []
         for index in 0 ..< (won + lost) {
-            result.append(
-                Point(
-                    sequence: index,
-                    number: index + 1,
-                    status: .complete,
-                    startingPosition: .offense,
-                    scoredBy: index < won ? .us : .them
-                )
+            let point = Point(
+                sequence: index,
+                number: index + 1,
+                status: .complete,
+                startingPosition: .offense
             )
+            let score = Event(
+                sequence: 0,
+                kind: .score,
+                scoringTeam: index < won ? .us : .them,
+                point: point
+            )
+            point.events.append(score)
+            result.append(point)
         }
         return result
     }

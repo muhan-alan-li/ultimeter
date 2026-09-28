@@ -23,8 +23,12 @@ final class SwiftDataPointRepository: PointRepository {
         try PointRules.check(.toggleLine(player), game: game, point: point)
         let holder = point.holder
         try context.write {
+            let wasSubbing = point.status == .active && !point.lineLocked
             if let index = point.line.firstIndex(where: { $0 === player }) {
                 point.line.remove(at: index)
+                if wasSubbing, LineRules.isComplete(point) {
+                    appendSubstitution(.completed, to: point)
+                }
                 return
             }
             point.line.append(player)
@@ -32,8 +36,8 @@ final class SwiftDataPointRepository: PointRepository {
                 !point.line.contains(where: { $0 === holder }) {
                 transferHolder(from: holder, to: player, in: point)
             }
-            if point.status == .active, LineRules.isComplete(point) {
-                point.lineLocked = true
+            if wasSubbing, LineRules.isComplete(point) {
+                appendSubstitution(.completed, to: point)
             }
         }
     }
@@ -46,7 +50,7 @@ final class SwiftDataPointRepository: PointRepository {
         guard wasLocked || LineRules.isEditable(point) else { return }
         try context.write {
             point.line = remaining
-            if wasLocked { point.lineLocked = false }
+            if wasLocked { appendSubstitution(.started, to: point) }
         }
     }
 
@@ -54,7 +58,7 @@ final class SwiftDataPointRepository: PointRepository {
         let game = try requireGame(of: point)
         try PointRules.check(.sub, game: game, point: point)
         try context.write {
-            point.lineLocked = false
+            appendSubstitution(.started, to: point)
         }
     }
 
@@ -65,7 +69,7 @@ final class SwiftDataPointRepository: PointRepository {
         try PointRules.check(.startPull, game: game, point: point)
         try context.write {
             if point.startingPosition != .defense {
-                _ = setStatPlayer(in: point, kind: .pull, to: nil)
+                _ = setEventPlayer(in: point, kind: .pull, to: nil)
             }
             activate(point)
         }
@@ -75,7 +79,7 @@ final class SwiftDataPointRepository: PointRepository {
         let game = try requireGame(of: point)
         try PointRules.check(.pull(player), game: game, point: point)
         try context.write {
-            _ = setStatPlayer(in: point, kind: .pull, to: player)
+            _ = setEventPlayer(in: point, kind: .pull, to: player)
             activate(point)
         }
     }
@@ -83,30 +87,30 @@ final class SwiftDataPointRepository: PointRepository {
     // MARK: - Disc
 
     func recordPickup(in point: Point, by player: Player) throws {
-        try append(.pickup(player), kind: .pickup, to: point) { stat in
-            stat.player = player
+        try append(.pickup(player), kind: .pickup, to: point) { event in
+            event.player = player
         }
     }
 
     func recordPass(in point: Point, to receiver: Player) throws {
         let holder = point.holder
-        try append(.pass(receiver), kind: .pass, to: point) { stat in
-            stat.player = holder
-            stat.relatedPlayer = receiver
+        try append(.pass(receiver), kind: .pass, to: point) { event in
+            event.player = holder
+            event.relatedPlayer = receiver
         }
     }
 
     func recordDrop(in point: Point, to receiver: Player) throws {
         let holder = point.holder
-        try append(.drop(receiver), kind: .drop, to: point) { stat in
-            stat.player = holder
-            stat.relatedPlayer = receiver
+        try append(.drop(receiver), kind: .drop, to: point) { event in
+            event.player = holder
+            event.relatedPlayer = receiver
         }
     }
 
     func recordBlock(in point: Point, by player: Player) throws {
-        try append(.block(player), kind: .block, to: point) { stat in
-            stat.player = player
+        try append(.block(player), kind: .block, to: point) { event in
+            event.player = player
         }
     }
 
@@ -115,25 +119,23 @@ final class SwiftDataPointRepository: PointRepository {
     }
 
     func recordTheirTurnover(in point: Point) throws {
-        try append(.theirTurnover, kind: .turnover, to: point) { _ in }
+        try append(.theirTurnover, kind: .turnover, to: point) { event in
+            event.turnoverCause = .throwaway
+        }
     }
 
     // MARK: - Undo
 
-    func undoLastPass(in point: Point) throws {
-        try remove(.undoLastPass, kind: .pass, from: point)
-    }
-
-    func undoDrop(in point: Point) throws {
-        try remove(.undoDrop, kind: .drop, from: point)
-    }
-
-    func undoBlock(in point: Point) throws {
-        try remove(.undoBlock, kind: .block, from: point)
-    }
-
-    func undoLastTurnover(in point: Point) throws {
-        try remove(.undoLastTurnover, kind: .turnover, from: point)
+    /// Reverts the most recent event of a live point.
+    func undoLastEvent(in point: Point) throws {
+        let game = try requireGame(of: point)
+        try PointRules.check(.undoLastEvent, game: game, point: point)
+        guard let event = point.orderedEvents.last(where: {
+            PointRules.isUndoable($0.kind)
+        }) else { throw AppError.invalidAction }
+        try context.write {
+            deleteEvent(event, from: point)
+        }
     }
 
     // MARK: - Result
@@ -143,13 +145,14 @@ final class SwiftDataPointRepository: PointRepository {
         try PointRules.check(.score(player), game: game, point: point)
         let holder = point.holder
         try context.write {
-            let pass = point.makeStat(kind: .pass)
+            let pass = point.makeEvent(kind: .pass)
             pass.player = holder
             pass.relatedPlayer = player
+            pass.isScoringPass = true
             context.insert(pass)
-            point.stats.append(pass)
-            _ = setStatPlayer(in: point, kind: .goal, to: player)
-            finish(point, in: game, scoredBy: .us)
+            point.events.append(pass)
+            appendScore(player, scoredBy: .us, to: point)
+            finish(point, in: game)
         }
     }
 
@@ -162,18 +165,23 @@ final class SwiftDataPointRepository: PointRepository {
         try PointRules.checkResult(game, point: point, scoredBy: scoredBy)
         if point.status == .active {
             try context.write {
-                if scoredBy == .them, let goal = goalStat(in: point) {
-                    deleteStat(goal, from: point)
-                }
-                finish(point, in: game, scoredBy: scoredBy)
+                appendScore(nil, scoredBy: scoredBy, to: point)
+                finish(point, in: game)
             }
             return
         }
         guard point.scoredBy != scoredBy else { return }
         try context.write {
-            point.scoredBy = scoredBy
-            if scoredBy == .them, let goal = goalStat(in: point) {
-                deleteStat(goal, from: point)
+            if let score = scoreEvent(in: point) {
+                score.scoringTeam = scoredBy
+                if scoredBy == .them {
+                    score.player = nil
+                    if let scoringPass = point.orderedEvents.last(where: \.isScoringPass) {
+                        deleteEvent(scoringPass, from: point)
+                    }
+                }
+            } else {
+                appendScore(nil, scoredBy: scoredBy, to: point)
             }
             insertHalftimeIfNeeded(in: game)
             let reachedTarget = GameProgress.reachedTarget(game)
@@ -196,10 +204,8 @@ final class SwiftDataPointRepository: PointRepository {
     // MARK: - Result helpers
 
     /// Marks a point complete and opens the next point.
-    private func finish(_ point: Point, in game: Game, scoredBy: ScoringTeam) {
-        point.scoredBy = scoredBy
+    private func finish(_ point: Point, in game: Game) {
         point.status = .complete
-        point.lineLocked = true
         guard !GameProgress.reachedTarget(game) else {
             game.status = .ended
             return
@@ -238,7 +244,7 @@ final class SwiftDataPointRepository: PointRepository {
     }
 }
 
-// MARK: - Stat helpers
+// MARK: - Event helpers
 
 extension SwiftDataPointRepository {
 
@@ -246,17 +252,17 @@ extension SwiftDataPointRepository {
     /// Finds the pickup or pass that defines the holder and repoints it.
     /// Runs inside the line write, so the swap stays atomic.
     private func transferHolder(from old: Player, to new: Player, in point: Point) {
-        var defining: Stat?
+        var defining: Event?
         var isPass = false
-        for stat in point.orderedStats {
-            switch stat.kind {
+        for event in point.orderedEvents {
+            switch event.kind {
             case .turnover, .drop:
                 defining = nil
             case .pickup:
-                defining = stat
+                defining = event
                 isPass = false
             case .pass:
-                defining = stat
+                defining = event
                 isPass = true
             default:
                 break
@@ -272,71 +278,63 @@ extension SwiftDataPointRepository {
 
     private func activate(_ point: Point) {
         point.status = .active
-        point.lineLocked = true
     }
 
-    /// Guards one append action, then adds the stat in one write.
+    private func appendSubstitution(_ phase: SubstitutionPhase, to point: Point) {
+        let event = point.makeEvent(kind: .sub)
+        event.substitutionPhase = phase
+        context.insert(event)
+        point.events.append(event)
+    }
+
+    private func appendScore(_ player: Player?, scoredBy: ScoringTeam, to point: Point) {
+        let event = point.makeEvent(kind: .score)
+        event.player = player
+        event.scoringTeam = scoredBy
+        context.insert(event)
+        point.events.append(event)
+    }
+
+    /// Guards one append action, then adds the event in one write.
     private func append(
         _ action: PointAction,
-        kind: StatKind,
+        kind: EventKind,
         to point: Point,
-        configure: (Stat) -> Void
+        configure: (Event) -> Void
     ) throws {
         let game = try requireGame(of: point)
         try PointRules.check(action, game: game, point: point)
         try context.write {
-            let stat = point.makeStat(kind: kind)
-            configure(stat)
-            context.insert(stat)
-            point.stats.append(stat)
+            let event = point.makeEvent(kind: kind)
+            configure(event)
+            context.insert(event)
+            point.events.append(event)
         }
     }
 
-    /// Guards one undo action, then removes the stat in one write.
-    /// Drop and block undos remove the last stat. The guard proved its kind.
-    private func remove(
-        _ action: PointAction,
-        kind: StatKind,
-        from point: Point
-    ) throws {
-        let game = try requireGame(of: point)
-        try PointRules.check(action, game: game, point: point)
-        let stat: Stat?
-        switch action {
-        case .undoDrop, .undoBlock:
-            stat = point.orderedStats.last
-        default:
-            stat = point.orderedStats.last(where: { $0.kind == kind })
-        }
-        guard let stat else { throw AppError.invalidAction }
-        try context.write {
-            deleteStat(stat, from: point)
-        }
-    }
-
-    private func setStatPlayer(
+    private func setEventPlayer(
         in point: Point,
-        kind: StatKind,
+        kind: EventKind,
         to player: Player?
-    ) -> Stat {
-        if let existing = point.orderedStats.first(where: { $0.kind == kind }) {
+    ) -> Event {
+        if let existing = point.orderedEvents.first(where: { $0.kind == kind }) {
             existing.player = player
             return existing
         }
-        let stat = point.makeStat(kind: kind)
-        stat.player = player
-        context.insert(stat)
-        point.stats.append(stat)
-        return stat
+        let event = point.makeEvent(kind: kind)
+        event.player = player
+        context.insert(event)
+        point.events.append(event)
+        return event
     }
 
-    private func goalStat(in point: Point) -> Stat? {
-        point.orderedStats.first { $0.kind == .goal }
+    private func scoreEvent(in point: Point) -> Event? {
+        point.orderedEvents.first { $0.kind == .score }
     }
 
-    private func deleteStat(_ stat: Stat, from point: Point) {
-        point.stats.removeAll { $0 === stat }
-        context.delete(stat)
+    private func deleteEvent(_ event: Event, from point: Point) {
+        point.events.removeAll { $0 === event }
+        context.delete(event)
     }
 
     private func requireGame(of point: Point) throws -> Game {

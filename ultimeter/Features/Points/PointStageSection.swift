@@ -48,8 +48,7 @@ struct PointStageSection: View {
             fullWidthButton("They threw it away") {
                 model.theirTurnover()
             }
-            undoDropButton
-            undoTurnoverButton
+            undoButton
             opponentScoresButton
             if offer.canSub {
                 subButton
@@ -77,8 +76,7 @@ struct PointStageSection: View {
                     .accessibilityLabel("\(player.name) picks up")
                 }
             }
-            undoBlockButton
-            undoTurnoverButton
+            undoButton
             opponentScoresButton
             if offer.canSub {
                 subButton
@@ -111,15 +109,7 @@ struct PointStageSection: View {
                     }
                 }
             }
-            if offer.canUndoLastPass {
-                Button {
-                    model.undoLastPass()
-                } label: {
-                    Text("Undo last pass")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(.subheadline)
-            }
+            undoButton
             fullWidthButton("We turned it over") {
                 model.ourTurnover()
             }
@@ -211,28 +201,10 @@ struct PointStageSection: View {
 extension PointStageSection {
 
     @ViewBuilder
-    private var undoTurnoverButton: some View {
-        if offer.canUndoTurnover {
-            fullWidthButton("Undo turnover") {
-                model.undoTurnover()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var undoDropButton: some View {
-        if offer.canUndoDrop {
-            fullWidthButton("Undo drop") {
-                model.undoDrop()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var undoBlockButton: some View {
-        if offer.canUndoBlock {
-            fullWidthButton("Undo block") {
-                model.undoBlock()
+    private var undoButton: some View {
+        if offer.canUndo {
+            fullWidthButton("Undo last action") {
+                model.undoLastEvent()
             }
         }
     }

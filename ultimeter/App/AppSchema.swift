@@ -16,7 +16,7 @@ enum AppSchema {
         Opponent.self,
         Tournament.self,
         Point.self,
-        Stat.self,
+        Event.self,
         Halftime.self
     ]
 

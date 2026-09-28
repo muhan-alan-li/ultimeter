@@ -12,7 +12,6 @@ enum Gender: String, Codable, CaseIterable {
     case female
     case nonBinary
 
-    /// The name shown in the user interface.
     var displayName: String {
         switch self {
         case .male: "Male"
@@ -34,11 +33,11 @@ final class Player {
     @Relationship(inverse: \Point.line)
     var points: [Point] = []
 
-    @Relationship(inverse: \Stat.player)
-    var stats: [Stat] = []
+    @Relationship(inverse: \Event.player)
+    var events: [Event] = []
 
-    @Relationship(inverse: \Stat.relatedPlayer)
-    var relatedStats: [Stat] = []
+    @Relationship(inverse: \Event.relatedPlayer)
+    var relatedEvents: [Event] = []
 
     init(name: String, gender: Gender) {
         self.name = name

@@ -67,10 +67,6 @@ struct PointDetailView: View {
                 }
                 if offer.hasStarted {
                     LabeledContent("Disc", value: offer.holder?.name ?? "No one")
-                    LabeledContent("Passes", value: "\(offer.passCount)")
-                }
-                if offer.hasStarted, offer.dropCount > 0 {
-                    LabeledContent("Drops", value: "\(offer.dropCount)")
                 }
             }
         }

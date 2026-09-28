@@ -5,6 +5,13 @@
 
 import Foundation
 
+/// A line issue shown on the point screen.
+/// Display state only. Thrown line failures are `AppError`.
+enum LineIssue: Equatable {
+    case incomplete(current: Int, required: Int)
+    case rosterTooSmall(have: Int, required: Int)
+}
+
 /// The rules of a point line.
 enum LineRules {
     /// The number of players on a line.
@@ -40,5 +47,17 @@ enum LineRules {
         line.filter { lined in
             roster.contains { $0 === lined }
         }
+    }
+
+    /// The line issue of a point, if one shows.
+    static func lineIssue(point: Point, roster: [Player]) -> LineIssue? {
+        guard point.status != .complete else { return nil }
+        if roster.count < size {
+            return .rosterTooSmall(have: roster.count, required: size)
+        }
+        if point.status == .active, !isComplete(point) {
+            return .incomplete(current: point.line.count, required: size)
+        }
+        return nil
     }
 }
