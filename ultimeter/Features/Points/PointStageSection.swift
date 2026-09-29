@@ -45,14 +45,7 @@ struct PointStageSection: View {
                     .accessibilityLabel("\(player.name) blocks")
                 }
             }
-            fullWidthButton("They threw it away") {
-                model.theirTurnover()
-            }
-            undoButton
-            opponentScoresButton
-            if offer.canSub {
-                subButton
-            }
+            activePointActions
         }
     }
 
@@ -76,11 +69,7 @@ struct PointStageSection: View {
                     .accessibilityLabel("\(player.name) picks up")
                 }
             }
-            undoButton
-            opponentScoresButton
-            if offer.canSub {
-                subButton
-            }
+            activePointActions
         }
     }
 
@@ -109,14 +98,7 @@ struct PointStageSection: View {
                     }
                 }
             }
-            undoButton
-            fullWidthButton("We turned it over") {
-                model.ourTurnover()
-            }
-            opponentScoresButton
-            if offer.canSub {
-                subButton
-            }
+            activePointActions
         }
     }
 
@@ -201,30 +183,59 @@ struct PointStageSection: View {
 extension PointStageSection {
 
     @ViewBuilder
-    private var undoButton: some View {
-        if offer.canUndo {
-            fullWidthButton("Undo last action") {
-                model.undoLastEvent()
+    private var activePointActions: some View {
+        if offer.canUndo || offer.canSub || offer.stage == .defense || offer.stage == .possession {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    if offer.canUndo {
+                        Button("Undo") {
+                            model.undoLastEvent()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Undo last action")
+                    }
+                    if offer.canSub {
+                        Button("Sub") {
+                            model.sub()
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    if offer.stage == .defense {
+                        Button("Turnover") {
+                            model.theirTurnover()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("They threw it away")
+                    } else if offer.stage == .possession {
+                        Button("Turnover") {
+                            model.ourTurnover()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("We turned it over")
+                    }
+                }
+                .font(.footnote.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+
+                if offer.stage == .defense {
+                    Button {
+                        record(.them)
+                    } label: {
+                        Text("\(model.opponentName) scores")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .font(.footnote.weight(.medium))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    .padding(.vertical, 8)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                    .disabled(!offer.opponentCanScore)
+                }
             }
-        }
-    }
-
-    private var opponentScoresButton: some View {
-        Button {
-            record(.them)
-        } label: {
-            Text("\(model.opponentName) scores")
-                .frame(maxWidth: .infinity)
-        }
-        .disabled(!offer.opponentCanScore)
-    }
-
-    private var subButton: some View {
-        Button {
-            model.sub()
-        } label: {
-            Text("Sub")
-                .frame(maxWidth: .infinity)
         }
     }
 

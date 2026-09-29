@@ -84,7 +84,7 @@ struct PointLineSection: View {
     }
 
     private var fixedLine: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 12) {
             if offer.line.isEmpty {
                 Text("No line recorded.")
                     .foregroundStyle(.secondary)
@@ -94,14 +94,6 @@ struct PointLineSection: View {
                         lineChip(player, onLine: true)
                             .background(chipColor, in: .capsule)
                     }
-                }
-            }
-            if offer.canSub {
-                Button {
-                    model.sub()
-                } label: {
-                    Text("Sub")
-                        .frame(maxWidth: .infinity)
                 }
             }
         }
