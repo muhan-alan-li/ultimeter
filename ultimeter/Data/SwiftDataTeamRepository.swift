@@ -40,20 +40,16 @@ final class SwiftDataTeamRepository: TeamRepository {
         }
     }
 
-    func addPlayer(_ draft: PlayerDraft, to team: Team) throws {
-        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw AppError.emptyName(field: "Player name") }
+    func addPlayers(_ draft: PlayerDraft, to team: Team) throws {
+        let names = draft.names.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !names.isEmpty else { throw AppError.emptyName(field: "Player name") }
         try context.write {
-            let player = Player(name: name, gender: draft.gender)
-            context.insert(player)
-            team.players.append(player)
-        }
-    }
-
-    func addExisting(_ player: Player, to team: Team) throws {
-        guard !team.players.contains(where: { $0 === player }) else { return }
-        try context.write {
-            team.players.append(player)
+            for name in names {
+                let player = Player(name: name, gender: draft.gender)
+                context.insert(player)
+                team.players.append(player)
+            }
         }
     }
 

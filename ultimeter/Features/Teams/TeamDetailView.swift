@@ -21,7 +21,6 @@ struct TeamDetailView: View {
     @State private var model: TeamDetailViewModel
     @State private var selectedTab: TeamDetailTab = .roster
     @State private var showingNewPlayer = false
-    @State private var showingAddExisting = false
 
     init(team: Team) {
         self.team = team
@@ -51,13 +50,8 @@ struct TeamDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if selectedTab == .roster {
-                    Menu {
-                        Button("New Player") {
-                            showingNewPlayer = true
-                        }
-                        Button("Existing Player") {
-                            showingAddExisting = true
-                        }
+                    Button {
+                        showingNewPlayer = true
                     } label: {
                         Label("Add Player", systemImage: "plus")
                     }
@@ -66,9 +60,6 @@ struct TeamDetailView: View {
         }
         .sheet(isPresented: $showingNewPlayer) {
             PlayerFormView(team: team)
-        }
-        .sheet(isPresented: $showingAddExisting) {
-            AddExistingPlayerView(team: team)
         }
         .connect(model)
         .errorAlert($model.error)

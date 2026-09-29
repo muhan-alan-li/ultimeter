@@ -19,9 +19,22 @@ struct TeamDraft {
 }
 
 /// The editable values of the new-player form.
+struct PlayerNameDraft: Identifiable {
+    let id = UUID()
+    var name = ""
+}
+
 struct PlayerDraft {
-    var name: String = ""
-    var gender: Gender = .nonBinary
+    var names: [PlayerNameDraft] = [PlayerNameDraft()]
+    var gender: Gender
+
+    init(team: Team) {
+        switch team.division {
+        case .open: gender = .male
+        case .womens: gender = .female
+        case .mixed: gender = .nonBinary
+        }
+    }
 }
 
 /// The write side of the team aggregate: the team and its roster.
@@ -29,7 +42,6 @@ struct PlayerDraft {
 protocol TeamRepository {
     func saveTeam(_ draft: TeamDraft, editing team: Team?) throws
     func delete(_ team: Team) throws
-    func addPlayer(_ draft: PlayerDraft, to team: Team) throws
-    func addExisting(_ player: Player, to team: Team) throws
+    func addPlayers(_ draft: PlayerDraft, to team: Team) throws
     func remove(_ player: Player, from team: Team) throws
 }

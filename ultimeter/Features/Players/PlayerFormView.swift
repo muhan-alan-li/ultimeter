@@ -20,7 +20,24 @@ struct PlayerFormView: View {
         NavigationStack {
             Form {
                 Section("Player") {
-                    TextField("Name", text: $model.draft.name)
+                    ForEach($model.draft.names) { $entry in
+                        HStack {
+                            TextField("Name", text: $entry.name)
+                            if model.draft.names.count > 1 {
+                                Button(role: .destructive) {
+                                    model.removeName(id: entry.id)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                }
+                                .accessibilityLabel("Remove player")
+                            }
+                        }
+                    }
+                    Button {
+                        model.addName()
+                    } label: {
+                        Label("Add Player", systemImage: "plus.circle")
+                    }
                     Picker("Gender", selection: $model.draft.gender) {
                         ForEach(Gender.allCases, id: \.self) { gender in
                             Text(gender.displayName).tag(gender)

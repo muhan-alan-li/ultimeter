@@ -14,25 +14,34 @@ final class PlayerFormViewModel: ScreenModel {
     var error: AppError?
 
     /// The editable values of the form.
-    var draft = PlayerDraft()
+    var draft: PlayerDraft
 
     private let team: Team
 
     init(team: Team) {
         self.team = team
-    }
-
-    /// The name without surrounding whitespace.
-    var trimmedName: String {
-        draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = PlayerDraft(team: team)
     }
 
     /// Whether the form can save.
-    var canSave: Bool { !trimmedName.isEmpty }
+    var canSave: Bool {
+        draft.names.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Adds an empty player row.
+    func addName() {
+        draft.names.append(PlayerNameDraft())
+    }
+
+    /// Removes a player row while keeping one row available.
+    func removeName(id: UUID) {
+        guard draft.names.count > 1 else { return }
+        draft.names.removeAll { $0.id == id }
+    }
 
     /// Adds the player to the team. Returns true on success.
     @discardableResult
     func save() -> Bool {
-        attempt { try deps.team.addPlayer(draft, to: team) }
+        attempt { try deps.team.addPlayers(draft, to: team) }
     }
 }
