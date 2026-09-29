@@ -19,13 +19,7 @@ struct GameDetailView: View {
     var body: some View {
         List {
             scoreSection
-            if model.canStart {
-                startSection
-            }
-            if model.canEnd {
-                endSection
-            }
-            infoSection
+            controlsSection
             Section("Points") {
                 PointListView(game: model.game)
             }
@@ -73,40 +67,38 @@ struct GameDetailView: View {
         }
     }
 
-    private var startSection: some View {
+    private var controlsSection: some View {
         Section {
-            Button {
-                model.start()
-            } label: {
-                Text("Start Game")
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private var endSection: some View {
-        Section {
-            if model.canSetCap {
+            if model.canStart {
                 Button {
-                    model.prepareCap()
-                    showingCapSheet = true
+                    model.start()
                 } label: {
-                    Text("Set Cap")
+                    Text("Start Game")
                         .frame(maxWidth: .infinity)
                 }
             }
-            Button(role: .destructive) {
-                model.prepareEndGame()
-                showingEndGame = true
-            } label: {
-                Text("End Game")
-                    .frame(maxWidth: .infinity)
+            if model.canEnd {
+                HStack(spacing: 12) {
+                    if model.canSetCap {
+                        Button {
+                            model.prepareCap()
+                            showingCapSheet = true
+                        } label: {
+                            Text("Set Cap")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Button(role: .destructive) {
+                        model.prepareEndGame()
+                        showingEndGame = true
+                    } label: {
+                        Text("End Game")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
-        }
-    }
-
-    private var infoSection: some View {
-        Section {
             DisclosureGroup("Additional Info") {
                 LabeledContent("Date", value: model.date, format: .dateTime.day().month().year())
                 LabeledContent("Tournament", value: model.tournamentName)
