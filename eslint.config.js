@@ -60,9 +60,7 @@ export default tseslint.config(
         rules: { '@typescript-eslint/consistent-type-definitions': ['error', 'interface'] },
     },
     {
-        files: [
-            'src/domain/{Session,Team,Player,Opponent,Tournament,Game,Point,PlayEvent,Halftime,types}.ts',
-        ],
+        files: ['src/domain/{Session,Team,Player,Game,Point,PlayEvent}.ts'],
         rules: {
             'no-restricted-syntax': [
                 'error',

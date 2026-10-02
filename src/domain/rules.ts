@@ -1,6 +1,7 @@
-import { gameById, teamById } from './selectors';
+import { gameById } from './Game';
+import { teamById } from './Team';
 import { AppError } from './AppError';
-import type { Game, ID, PlayEvent, Point, ScoringTeam, Session, Side } from './index';
+import type { Game, ID, PlayEvent, Point, ScoringTeam, Session } from './index';
 
 export interface PointState {
     phase: 'none' | 'defense' | 'awaitingPickup' | 'possession';
@@ -93,34 +94,6 @@ export function pointState(point: Point, events: PlayEvent[]): PointState {
     }
 
     return state;
-}
-
-export function gameScore(gameId: ID, session: Session): { us: number; them: number } {
-    const scored = session.points
-        .filter((p) => p.gameId === gameId && p.status === 'complete')
-        .map((p) => pointState(p, session.events).scoredBy);
-
-    return {
-        us: scored.filter((team) => team === 'us').length,
-        them: scored.filter((team) => team === 'them').length,
-    };
-}
-
-export function halfTarget(game: Game): number {
-    return game.halftimeTarget ?? Math.floor((game.targetPoints + 1) / 2);
-}
-
-export function sideForPoint(game: Game, number: number, session: Session): Side {
-    const half = session.halftimes.find((h) => h.gameId === game.id);
-    if (half?.pointNumber === number)
-        return game.startingPosition === 'offense' ? 'defense' : 'offense';
-    const lastPoint = session.points
-        .filter((p) => p.gameId === game.id && p.status === 'complete')
-        .sort((a, b) => b.number - a.number)[0];
-    if (!lastPoint) return game.startingPosition;
-    const result = pointState(lastPoint, session.events).scoredBy;
-
-    return result === 'us' ? 'defense' : result === 'them' ? 'offense' : game.startingPosition;
 }
 
 export interface PointAction {
@@ -318,48 +291,6 @@ export function validatePointAction(
             return;
         }
     }
-}
-
-export function canEditGameSetup(game: Game, session?: Session): boolean {
-    return (
-        game.status === 'scheduled' &&
-        (!session || !session.points.some((point) => point.gameId === game.id))
-    );
-}
-
-export function canStartGame(game: Game, session: Session): boolean {
-    return game.status === 'scheduled' && !session.points.some((point) => point.gameId === game.id);
-}
-
-export function canEndGame(game: Game): boolean {
-    return game.status === 'live';
-}
-
-export function gameCapMinimum(gameId: ID, session: Session): number {
-    const score = gameScore(gameId, session);
-
-    return Math.max(score.us, score.them) + 1;
-}
-
-export function canSetGameCap(game: Game, session: Session): boolean {
-    return canEndGame(game) && gameCapMinimum(game.id, session) <= 21;
-}
-
-export function validGameCap(game: Game, session: Session, value: number): boolean {
-    return Number.isInteger(value) && value >= gameCapMinimum(game.id, session) && value <= 21;
-}
-
-export function validFinalScore(gameId: ID, session: Session, us: number, them: number): boolean {
-    const score = gameScore(gameId, session);
-
-    return (
-        Number.isInteger(us) &&
-        Number.isInteger(them) &&
-        us >= score.us &&
-        them >= score.them &&
-        us <= 99 &&
-        them <= 99
-    );
 }
 
 export function lineIsEditable(point: Point, session: Session): boolean {

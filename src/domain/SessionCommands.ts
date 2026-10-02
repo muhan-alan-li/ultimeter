@@ -7,7 +7,7 @@ import {
     pointState,
     sideForPoint,
     validatePointAction,
-} from './rules';
+} from './index';
 
 export interface CommandSource {
     id(): ID;

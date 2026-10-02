@@ -1,11 +1,10 @@
 import type { Team } from './Team';
 import type { Player } from './Player';
-import type { Opponent } from './Opponent';
-import type { Tournament } from './Tournament';
-import type { Game } from './Game';
+import type { Game, Halftime, Opponent, Tournament } from './Game';
 import type { Point } from './Point';
 import type { PlayEvent } from './PlayEvent';
-import type { Halftime } from './Halftime';
+
+export type ID = string;
 
 export interface Session {
     teams: Team[];
