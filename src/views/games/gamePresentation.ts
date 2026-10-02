@@ -1,8 +1,11 @@
+import { pointState } from '../../app/pointState';
 import {
     type Game,
     gameScore,
     gamesForTeam,
+    halftimeForGame,
     opponentById,
+    pointsForGame,
     type Session,
     tournamentById,
 } from '../../domain';
@@ -57,4 +60,46 @@ export function gameResult(game: Game, session: Session): { score: string; label
                 : 'T';
 
     return { score: `${score.us}–${score.them}`, label };
+}
+
+const outcomes: Record<string, string> = {
+    weHold: 'We hold',
+    weBreak: 'We break',
+    theyHold: 'They hold',
+    theyBreak: 'They break',
+};
+
+export function gamePointRows(game: Game, session: Session, expanded: boolean) {
+    const half = halftimeForGame(session, game.id);
+    let us = 0;
+    let them = 0;
+    const rows = pointsForGame(session, game.id).map((point) => {
+        const state = pointState(point, session.events);
+        if (point.status === 'complete') {
+            if (state.scoredBy === 'us') us++;
+            if (state.scoredBy === 'them') them++;
+        }
+
+        return {
+            point,
+            scoreText: `${us} – ${them}`,
+            result: state.outcome
+                ? outcomes[state.outcome]
+                : point.status === 'active'
+                  ? 'Live'
+                  : 'Scheduled',
+            tone: state.scoredBy === 'us' ? 'good' : state.scoredBy === 'them' ? 'bad' : '',
+            side: point.startingPosition === 'offense' ? 'O' : 'D',
+        };
+    });
+    const shown = expanded ? rows : rows.slice(-3);
+
+    return shown.map((row, index) => ({
+        ...row,
+        showHalf:
+            !!half &&
+            row.point.number >= half.pointNumber &&
+            index > 0 &&
+            shown[index - 1].point.number < half.pointNumber,
+    }));
 }

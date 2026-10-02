@@ -1,14 +1,9 @@
+import { type GameAction, gameReducer } from '../app/gameReducer';
+import type { PointAction } from '../app/pointActions';
 import { SessionCommands } from '../domain/SessionCommands';
 import type { RepositoryPort } from './Repository';
 import Dexie, { type Table } from 'dexie';
-import {
-    AppError,
-    emptySession,
-    type Game,
-    type ID,
-    type PointAction,
-    type Session,
-} from '../domain';
+import { AppError, emptySession, type Game, type ID, type Session } from '../domain';
 
 interface SessionRecord {
     id: 'session';
@@ -81,6 +76,15 @@ export class SessionRepository implements RepositoryPort {
         });
     }
 
+    private async transition(action: GameAction): Promise<void> {
+        const transition = { action, idPrefix: crypto.randomUUID(), createdAt: Date.now() };
+        await this.database.transaction('rw', this.database.state, async () => {
+            const previous = storedSession(await this.database.state.get(recordId));
+            const value = gameReducer(previous, transition);
+            await this.database.state.put({ id: recordId, value });
+        });
+    }
+
     async saveTeam(
         draft: { name: string; division: Session['teams'][number]['division'] },
         teamId?: ID,
@@ -123,18 +127,18 @@ export class SessionRepository implements RepositoryPort {
     }
 
     async startGame(gameId: ID): Promise<void> {
-        return this.update((commands) => commands.startGame(gameId));
+        return this.transition({ kind: 'start', gameId });
     }
 
     async setCap(gameId: ID, cap: number): Promise<void> {
-        return this.update((commands) => commands.setCap(gameId, cap));
+        return this.transition({ kind: 'cap', gameId, cap });
     }
 
     async endGame(gameId: ID, us: number, them: number): Promise<void> {
-        return this.update((commands) => commands.endGame(gameId, us, them));
+        return this.transition({ kind: 'end', gameId, us, them });
     }
 
     async pointAction(gameId: ID, pointId: ID, action: PointAction): Promise<void> {
-        return this.update((commands) => commands.pointAction(gameId, pointId, action));
+        return this.transition({ kind: 'point', gameId, pointId, action });
     }
 }

@@ -48,7 +48,6 @@ export default tseslint.config(
                         '**/storage',
                         '**/storage/**',
                         '**/app/**',
-                        '**/controllers/**',
                         '**/views/**',
                     ],
                 },
@@ -71,27 +70,6 @@ export default tseslint.config(
                 {
                     selector: 'ClassExpression',
                     message: 'Describe models with interfaces. Keep behavior in pure functions.',
-                },
-            ],
-        },
-    },
-    {
-        files: ['src/controllers/**/*.ts'],
-        rules: {
-            'no-restricted-imports': [
-                'error',
-                {
-                    patterns: [
-                        'react',
-                        'react-dom',
-                        'react-dom/*',
-                        'dexie',
-                        '**/storage/SessionRepository',
-                        '**/storage/queries',
-                        '**/views/**',
-                        '**/app/context',
-                        '**/app/useController',
-                    ],
                 },
             ],
         },

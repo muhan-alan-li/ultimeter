@@ -1,4 +1,5 @@
-import type { Division, Game, Gender, PointAction, Session } from '../domain';
+import type { PointAction } from '../app/pointActions';
+import type { Division, Game, Gender, Session } from '../domain';
 
 export interface RepositoryPort {
     read(): Promise<Session>;

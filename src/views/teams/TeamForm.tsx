@@ -1,9 +1,8 @@
-import type { FormEvent } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useApp, useDirty } from '../../app/context';
-import { useController } from '../../app/useController';
 import { Dialog } from '../shared';
 import type { Division, Team } from '../../domain';
-import { TeamFormController } from '../../controllers/teams/TeamFormController';
+import { teamDraft, teamDraftIsValid } from './teamDraft';
 
 const divisions: Array<{ value: Division; label: string }> = [
     { value: 'open', label: 'Open' },
@@ -12,13 +11,29 @@ const divisions: Array<{ value: Division; label: string }> = [
 ];
 
 export function TeamForm({ team, onClose }: { team: Team | null; onClose: () => void }) {
-    const controller = useController(() => new TeamFormController(team));
-    const { busy } = useApp();
-    useDirty(controller.dirty);
+    const application = useApp();
+    const { session, busy } = application;
+    const [initial] = useState(() => teamDraft(team?.name, team?.division));
+    const [draft, setDraft] = useState(initial);
+    const name = draft.name.trim().toLocaleLowerCase();
+    const duplicateName =
+        !!name &&
+        session.teams.some(
+            (item) => item.id !== team?.id && item.name.toLocaleLowerCase() === name,
+        );
+    const valid = teamDraftIsValid(draft, session, team?.id);
+    useDirty(draft.name !== initial.name || draft.division !== initial.division);
 
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (await controller.save()) onClose();
+        if (!valid) return;
+        const saved = await application.run(() =>
+            application.repository.saveTeam(
+                { name: draft.name.trim(), division: draft.division },
+                team?.id,
+            ),
+        );
+        if (saved) onClose();
     }
 
     return (
@@ -29,20 +44,18 @@ export function TeamForm({ team, onClose }: { team: Team | null; onClose: () => 
                     <input
                         autoFocus
                         required
-                        value={controller.draft.name}
-                        aria-invalid={controller.duplicateName}
-                        aria-describedby={controller.duplicateName ? 'team-name-error' : undefined}
+                        value={draft.name}
+                        aria-invalid={duplicateName}
+                        aria-describedby={duplicateName ? 'team-name-error' : undefined}
                         ref={(input) =>
                             input?.setCustomValidity(
-                                controller.duplicateName
-                                    ? 'A team with this name already exists.'
-                                    : '',
+                                duplicateName ? 'A team with this name already exists.' : '',
                             )
                         }
-                        onChange={(event) => controller.setName(event.target.value)}
+                        onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                     />
                 </label>
-                {controller.duplicateName && (
+                {duplicateName && (
                     <p id="team-name-error" className="error" role="status">
                         A team with this name already exists.
                     </p>
@@ -50,8 +63,10 @@ export function TeamForm({ team, onClose }: { team: Team | null; onClose: () => 
                 <label className="field">
                     Division
                     <select
-                        value={controller.draft.division}
-                        onChange={(event) => controller.setDivision(event.target.value as Division)}
+                        value={draft.division}
+                        onChange={(event) =>
+                            setDraft({ ...draft, division: event.target.value as Division })
+                        }
                     >
                         {divisions.map((item) => (
                             <option key={item.value} value={item.value}>
@@ -64,11 +79,7 @@ export function TeamForm({ team, onClose }: { team: Team | null; onClose: () => 
                     <button type="button" className="button" disabled={busy} onClick={onClose}>
                         Cancel
                     </button>
-                    <button
-                        type="submit"
-                        className="button primary"
-                        disabled={busy || !controller.valid}
-                    >
+                    <button type="submit" className="button primary" disabled={busy || !valid}>
                         Save team
                     </button>
                 </div>

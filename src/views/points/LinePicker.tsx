@@ -1,4 +1,5 @@
-import type { Player, PointAction } from '../../domain';
+import type { PointAction } from '../../app/pointActions';
+import type { Player } from '../../domain';
 
 export function LinePicker({
     rows,

@@ -1,9 +1,8 @@
-import type { FormEvent } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useApp, useDirty } from '../../app/context';
-import { useController } from '../../app/useController';
 import { Dialog } from '../shared';
 import type { Division, Gender } from '../../domain';
-import { PlayerFormController } from '../../controllers/players/PlayerFormController';
+import { defaultGenderForDivision, playerNamesFromLines } from './playerDraft';
 
 export function PlayerForm({
     teamId,
@@ -14,13 +13,21 @@ export function PlayerForm({
     division: Division;
     onClose: () => void;
 }) {
-    const controller = useController(() => new PlayerFormController(teamId, division));
-    const { busy } = useApp();
-    useDirty(controller.dirty);
+    const application = useApp();
+    const { busy } = application;
+    const [names, setNames] = useState('');
+    const [initialGender] = useState(() => defaultGenderForDivision(division));
+    const [gender, setGender] = useState(initialGender);
+    const cleanNames = playerNamesFromLines(names);
+    useDirty(names.trim().length > 0 || gender !== initialGender);
 
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (await controller.save()) onClose();
+        if (!cleanNames.length) return;
+        const saved = await application.run(() =>
+            application.repository.addPlayers(teamId, cleanNames, gender).then(() => true),
+        );
+        if (saved) onClose();
     }
 
     return (
@@ -31,16 +38,16 @@ export function PlayerForm({
                     <textarea
                         autoFocus
                         rows={6}
-                        value={controller.names}
-                        onChange={(event) => controller.setNames(event.target.value)}
+                        value={names}
+                        onChange={(event) => setNames(event.target.value)}
                         placeholder="Enter one name per line"
                     />
                 </label>
                 <label className="field">
                     Gender
                     <select
-                        value={controller.gender}
-                        onChange={(event) => controller.setGender(event.target.value as Gender)}
+                        value={gender}
+                        onChange={(event) => setGender(event.target.value as Gender)}
                     >
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -54,9 +61,9 @@ export function PlayerForm({
                     <button
                         type="submit"
                         className="button primary"
-                        disabled={busy || !controller.cleanNames.length}
+                        disabled={busy || !cleanNames.length}
                     >
-                        Add {controller.cleanNames.length || 'players'}
+                        Add {cleanNames.length || 'players'}
                     </button>
                 </div>
             </form>

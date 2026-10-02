@@ -6,4 +6,3 @@ export * from './Game';
 export * from './Point';
 export * from './PlayEvent';
 export * from './SessionCommands';
-export * from './rules';

@@ -1,16 +1,35 @@
 import { PointList } from './PointList';
-import type { FormEvent } from 'react';
+import { type FormEvent, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useDirty } from '../../app/context';
-import { useController } from '../../app/useController';
+import { useApp, useDirty } from '../../app/context';
+import {
+    canEndGame,
+    canSetGameCap,
+    canStartGame,
+    type Game,
+    gameById,
+    gameCapMinimum,
+    gameScore,
+    halftimeForGame,
+    opponentById,
+    pointsForGame,
+    teamById,
+    tournamentById,
+    validFinalScore,
+    validGameCap,
+} from '../../domain';
+import { gamePointRows } from './gamePresentation';
 import { Dialog, Empty, PageHeader } from '../shared';
-import { GameDetailController } from '../../controllers/games/GameDetailController';
 import { GameForm } from './GameForm';
 
 export function GamePage() {
     const { gameId } = useParams();
-    const controller = useController(() => new GameDetailController(gameId ?? ''));
-    if (!controller.exists)
+    const application = useApp();
+    const { session, busy } = application;
+    const [expanded, setExpanded] = useState(false);
+    const [dialog, setDialog] = useState<'cap' | 'end' | 'edit'>();
+    const game = gameById(session, gameId ?? '');
+    if (!game)
         return (
             <main className="page">
                 <Empty title="Game not found">
@@ -18,63 +37,61 @@ export function GamePage() {
                 </Empty>
             </main>
         );
-    const game = controller.game;
+    const score = gameScore(game.id, session);
+    const scoreText = `${score.us} – ${score.them}`;
+    const teamName = teamById(session, game.teamId)?.name ?? 'Our team';
+    const opponentName = opponentById(session, game.opponentId)?.name ?? 'Opponent';
+    const tournamentName = tournamentById(session, game.tournamentId)?.name ?? 'Standalone';
+    const half = halftimeForGame(session, game.id);
+    const statusText =
+        game.status === 'ended' ? 'Game over' : game.status === 'live' ? 'Live game' : 'Scheduled';
+    const dateText = new Date(game.date).toLocaleDateString(undefined, {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+    });
+    const closeDialog = () => setDialog(undefined);
 
     return (
         <main className="page stack">
-            <PageHeader
-                title="Game"
-                subtitle={controller.dateText}
-                back={`/teams/${game.teamId}/games`}
-            >
-                <button disabled={controller.busy} onClick={() => controller.openDialog('edit')}>
+            <PageHeader title="Game" subtitle={dateText} back={`/teams/${game.teamId}/games`}>
+                <button disabled={busy} onClick={() => setDialog('edit')}>
                     Edit game
                 </button>
             </PageHeader>
             <section className="scoreboard card">
                 <span className={`badge ${game.status === 'live' ? 'live' : ''}`}>
-                    {controller.statusText}
+                    {statusText}
                 </span>
-                <h2>{controller.title}</h2>
-                <div
-                    className="score"
-                    aria-label={`Score ${controller.score.us} to ${controller.score.them}`}
-                >
-                    {controller.scoreText}
+                <h2>{`${teamName} vs ${opponentName}`}</h2>
+                <div className="score" aria-label={`Score ${score.us} to ${score.them}`}>
+                    {scoreText}
                 </div>
                 <p>
-                    Target {game.targetPoints} <span aria-hidden="true">·</span>{' '}
-                    {controller.tournamentName}
+                    Target {game.targetPoints} <span aria-hidden="true">·</span> {tournamentName}
                 </p>
-                {controller.half && (
-                    <p className="muted">
-                        Second half starts at point {controller.half.pointNumber}
-                    </p>
-                )}
+                {half && <p className="muted">Second half starts at point {half.pointNumber}</p>}
                 <div className="actions centered">
-                    {controller.canStart && (
+                    {canStartGame(game, session) && (
                         <button
                             className="primary"
-                            disabled={controller.busy}
-                            onClick={() => void controller.start()}
+                            disabled={busy}
+                            onClick={() =>
+                                void application.run(() =>
+                                    application.repository.startGame(game.id),
+                                )
+                            }
                         >
                             Start game
                         </button>
                     )}
-                    {controller.canSetCap && (
-                        <button
-                            disabled={controller.busy}
-                            onClick={() => controller.openDialog('cap')}
-                        >
+                    {canSetGameCap(game, session) && (
+                        <button disabled={busy} onClick={() => setDialog('cap')}>
                             Set cap
                         </button>
                     )}
-                    {controller.canEnd && (
-                        <button
-                            className="danger"
-                            disabled={controller.busy}
-                            onClick={() => controller.openDialog('end')}
-                        >
+                    {canEndGame(game) && (
+                        <button className="danger" disabled={busy} onClick={() => setDialog('end')}>
                             End game
                         </button>
                     )}
@@ -82,73 +99,69 @@ export function GamePage() {
             </section>
             <PointList
                 gameId={game.id}
-                rows={controller.entries()}
-                count={controller.points.length}
-                expanded={controller.expanded}
-                onToggleExpanded={() => controller.toggleExpanded()}
+                rows={gamePointRows(game, session, expanded)}
+                count={pointsForGame(session, game.id).length}
+                expanded={expanded}
+                onToggleExpanded={() => setExpanded((value) => !value)}
             />
             <details className="card">
                 <summary>Game details</summary>
                 <dl className="details-grid">
                     <dt>Team</dt>
-                    <dd>{controller.teamName}</dd>
+                    <dd>{teamName}</dd>
                     <dt>Opponent</dt>
-                    <dd>{controller.opponentName}</dd>
+                    <dd>{opponentName}</dd>
                     <dt>Tournament</dt>
-                    <dd>{controller.tournamentName}</dd>
+                    <dd>{tournamentName}</dd>
                     <dt>Starting side</dt>
                     <dd>{game.startingPosition}</dd>
                     <dt>Target</dt>
                     <dd>{game.targetPoints}</dd>
                     <dt>Status</dt>
-                    <dd>{controller.statusText}</dd>
+                    <dd>{statusText}</dd>
                 </dl>
             </details>
-            {controller.dialog === 'edit' && (
-                <GameForm
-                    teamId={game.teamId}
-                    game={game}
-                    onClose={() => controller.closeDialog()}
-                />
+            {dialog === 'edit' && (
+                <GameForm teamId={game.teamId} game={game} onClose={() => closeDialog()} />
             )}
-            {controller.dialog === 'cap' && (
-                <CapForm controller={controller} onClose={() => controller.closeDialog()} />
-            )}
-            {controller.dialog === 'end' && (
-                <EndForm controller={controller} onClose={() => controller.closeDialog()} />
-            )}
+            {dialog === 'cap' && <CapForm game={game} onClose={() => closeDialog()} />}
+            {dialog === 'end' && <EndForm game={game} onClose={() => closeDialog()} />}
         </main>
     );
 }
 
-function CapForm({
-    controller,
-    onClose,
-}: {
-    controller: GameDetailController;
-    onClose: () => void;
-}) {
-    useDirty(controller.capDirty);
+function CapForm({ game, onClose }: { game: Game; onClose: () => void }) {
+    const application = useApp();
+    const { session, busy } = application;
+    const capMinimum = gameCapMinimum(game.id, session);
+    const [initial] = useState(() => Math.min(21, Math.max(game.targetPoints, capMinimum)));
+    const [cap, setCap] = useState(initial);
+    const score = gameScore(game.id, session);
+    const scoreText = `${score.us} – ${score.them}`;
+    useDirty(cap !== initial);
     async function submit(event: FormEvent) {
         event.preventDefault();
-        const saved = await controller.saveCap();
+        if (!validGameCap(game, session, cap)) return;
+        const saved = await application.run(() =>
+            application.repository.setCap(game.id, cap).then(() => true),
+        );
         if (saved) onClose();
     }
 
     return (
         <Dialog title="Set point cap" onClose={onClose}>
             <form className="stack" onSubmit={submit}>
-                <p>Current score: {controller.scoreText}</p>
+                <p>Current score: {scoreText}</p>
                 <label className="field">
                     Point cap
                     <input
                         type="number"
                         autoFocus
-                        min={controller.capMinimum}
+                        min={capMinimum}
                         max={21}
                         step={1}
-                        value={controller.cap}
-                        onChange={(event) => controller.setCap(Number(event.target.value))}
+                        value={cap}
+                        onChange={(event) => setCap(Number(event.target.value))}
                     />
                 </label>
                 <p className="muted">The halftime target stays fixed.</p>
@@ -158,7 +171,7 @@ function CapForm({
                     </button>
                     <button
                         className="primary"
-                        disabled={controller.busy || !controller.validCap(controller.cap)}
+                        disabled={busy || !validGameCap(game, session, cap)}
                     >
                         Save cap
                     </button>
@@ -168,17 +181,22 @@ function CapForm({
     );
 }
 
-function EndForm({
-    controller,
-    onClose,
-}: {
-    controller: GameDetailController;
-    onClose: () => void;
-}) {
-    useDirty(controller.endDirty);
+function EndForm({ game, onClose }: { game: Game; onClose: () => void }) {
+    const application = useApp();
+    const { session, busy } = application;
+    const score = gameScore(game.id, session);
+    const teamName = teamById(session, game.teamId)?.name ?? 'Our team';
+    const opponentName = opponentById(session, game.opponentId)?.name ?? 'Opponent';
+    const [initial] = useState(score);
+    const [endUs, setEndUs] = useState(initial.us);
+    const [endThem, setEndThem] = useState(initial.them);
+    useDirty(endUs !== initial.us || endThem !== initial.them);
     async function submit(event: FormEvent) {
         event.preventDefault();
-        const saved = await controller.end();
+        if (!validFinalScore(game.id, session, endUs, endThem)) return;
+        const saved = await application.run(() =>
+            application.repository.endGame(game.id, endUs, endThem).then(() => true),
+        );
         if (saved) onClose();
     }
 
@@ -190,26 +208,26 @@ function EndForm({
                     recorded scores.
                 </p>
                 <label className="field">
-                    {controller.teamName}
+                    {teamName}
                     <input
                         type="number"
                         autoFocus
-                        min={controller.score.us}
+                        min={score.us}
                         max={99}
                         step={1}
-                        value={controller.endUs}
-                        onChange={(event) => controller.setEndUs(Number(event.target.value))}
+                        value={endUs}
+                        onChange={(event) => setEndUs(Number(event.target.value))}
                     />
                 </label>
                 <label className="field">
-                    {controller.opponentName}
+                    {opponentName}
                     <input
                         type="number"
-                        min={controller.score.them}
+                        min={score.them}
                         max={99}
                         step={1}
-                        value={controller.endThem}
-                        onChange={(event) => controller.setEndThem(Number(event.target.value))}
+                        value={endThem}
+                        onChange={(event) => setEndThem(Number(event.target.value))}
                     />
                 </label>
                 <p className="muted">
@@ -221,10 +239,7 @@ function EndForm({
                     </button>
                     <button
                         className="danger"
-                        disabled={
-                            controller.busy ||
-                            !controller.validFinalScore(controller.endUs, controller.endThem)
-                        }
+                        disabled={busy || !validFinalScore(game.id, session, endUs, endThem)}
                     >
                         End game
                     </button>

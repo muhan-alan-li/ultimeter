@@ -1,12 +1,11 @@
 import type { Session } from '../domain';
 import type { SessionQuery } from '../storage/queries';
-import type { ControllerDependencies } from '../controllers/ports';
 import type { RepositoryPort } from '../storage/Repository';
 import { errorMessage } from './errorMessages';
 import { Observable } from './Observable';
 
 /** Own the active session, action lock, and shared errors. */
-export class Application extends Observable implements ControllerDependencies {
+export class Application extends Observable {
     private current?: Session;
     private dirtyTokens = new Set<symbol>();
     busy = false;

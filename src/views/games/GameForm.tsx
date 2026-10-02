@@ -1,9 +1,15 @@
-import type { FormEvent } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useApp, useDirty } from '../../app/context';
-import { useController } from '../../app/useController';
 import { Dialog } from '../shared';
 import type { Game, Side } from '../../domain';
-import { GameFormController } from '../../controllers/games/GameFormController';
+import {
+    gameDateTimestamp,
+    gameDraft,
+    gameDraftIsValid,
+    suggestionsForName,
+    trimGameNames,
+} from './gameDraft';
+import { canEditGameSetup, gameById } from '../../domain';
 
 export interface GameFormProps {
     teamId: string;
@@ -12,13 +18,45 @@ export interface GameFormProps {
 }
 
 export function GameForm({ teamId, game, onClose }: GameFormProps) {
-    const { session, busy } = useApp();
-    const controller = useController(() => new GameFormController(teamId, game, session));
-    useDirty(controller.dirty);
+    const application = useApp();
+    const { session, busy } = application;
+    const [initial] = useState(() => gameDraft(game, session));
+    const [draft, setDraft] = useState(initial);
+    const currentGame = game ? gameById(session, game.id) : undefined;
+    const scoringSetupLocked = !!game && (!currentGame || !canEditGameSetup(currentGame, session));
+    const valid = gameDraftIsValid(draft);
+    const opponentSuggestions = suggestionsForName(
+        session.opponents.map((item) => item.name),
+        draft.opponentName,
+    );
+    const tournamentSuggestions = suggestionsForName(
+        session.tournaments.map((item) => item.name),
+        draft.tournamentName,
+    );
+    useDirty(
+        draft.date !== initial.date ||
+            draft.opponentName.trim() !== initial.opponentName ||
+            draft.tournamentName.trim() !== initial.tournamentName ||
+            draft.targetPoints !== initial.targetPoints ||
+            draft.startingPosition !== initial.startingPosition,
+    );
 
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (await controller.save()) onClose();
+        if (!valid || (game && !currentGame)) return;
+        const saved = await application.run(() =>
+            application.repository.saveGame(
+                teamId,
+                {
+                    date: gameDateTimestamp(draft.date),
+                    ...trimGameNames(draft),
+                    targetPoints: draft.targetPoints,
+                    startingPosition: draft.startingPosition,
+                },
+                game?.id,
+            ),
+        );
+        if (saved) onClose();
     }
 
     return (
@@ -28,13 +66,15 @@ export function GameForm({ teamId, game, onClose }: GameFormProps) {
                     Opponent
                     <input
                         required
-                        value={controller.draft.opponentName}
+                        value={draft.opponentName}
                         list="opponent-suggestions"
-                        onChange={(event) => controller.setOpponentName(event.target.value)}
+                        onChange={(event) =>
+                            setDraft({ ...draft, opponentName: event.target.value })
+                        }
                         autoComplete="off"
                     />
                     <datalist id="opponent-suggestions">
-                        {controller.opponentSuggestions.map((name) => (
+                        {opponentSuggestions.map((name) => (
                             <option key={name} value={name} />
                         ))}
                     </datalist>
@@ -42,13 +82,15 @@ export function GameForm({ teamId, game, onClose }: GameFormProps) {
                 <label className="field">
                     Tournament (optional)
                     <input
-                        value={controller.draft.tournamentName}
+                        value={draft.tournamentName}
                         list="tournament-suggestions"
-                        onChange={(event) => controller.setTournamentName(event.target.value)}
+                        onChange={(event) =>
+                            setDraft({ ...draft, tournamentName: event.target.value })
+                        }
                         autoComplete="off"
                     />
                     <datalist id="tournament-suggestions">
-                        {controller.tournamentSuggestions.map((name) => (
+                        {tournamentSuggestions.map((name) => (
                             <option key={name} value={name} />
                         ))}
                     </datalist>
@@ -58,8 +100,8 @@ export function GameForm({ teamId, game, onClose }: GameFormProps) {
                     <input
                         type="date"
                         required
-                        value={controller.draft.date}
-                        onChange={(event) => controller.setDate(event.target.value)}
+                        value={draft.date}
+                        onChange={(event) => setDraft({ ...draft, date: event.target.value })}
                     />
                 </label>
                 <label className="field">
@@ -69,25 +111,27 @@ export function GameForm({ teamId, game, onClose }: GameFormProps) {
                         min="1"
                         max="21"
                         required
-                        value={controller.draft.targetPoints}
-                        onChange={(event) => controller.setTargetPoints(Number(event.target.value))}
-                        disabled={controller.scoringSetupLocked}
+                        value={draft.targetPoints}
+                        onChange={(event) =>
+                            setDraft({ ...draft, targetPoints: Number(event.target.value) })
+                        }
+                        disabled={scoringSetupLocked}
                     />
                 </label>
                 <label className="field">
                     Starting position
                     <select
-                        value={controller.draft.startingPosition}
+                        value={draft.startingPosition}
                         onChange={(event) =>
-                            controller.setStartingPosition(event.target.value as Side)
+                            setDraft({ ...draft, startingPosition: event.target.value as Side })
                         }
-                        disabled={controller.scoringSetupLocked}
+                        disabled={scoringSetupLocked}
                     >
                         <option value="offense">Offense</option>
                         <option value="defense">Defense</option>
                     </select>
                 </label>
-                {controller.scoringSetupLocked && (
+                {scoringSetupLocked && (
                     <p className="muted">
                         Target and starting position are locked after the game starts.
                     </p>
@@ -96,11 +140,7 @@ export function GameForm({ teamId, game, onClose }: GameFormProps) {
                     <button type="button" className="button" disabled={busy} onClick={onClose}>
                         Cancel
                     </button>
-                    <button
-                        type="submit"
-                        className="button primary"
-                        disabled={busy || !controller.valid}
-                    >
+                    <button type="submit" className="button primary" disabled={busy || !valid}>
                         Save game
                     </button>
                 </div>

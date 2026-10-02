@@ -1,12 +1,15 @@
+import type { PointAction } from '../../app/pointActions';
 import { ActivePlayers } from './ActivePlayers';
 import { LinePicker } from './LinePicker';
 import { PlayHistory } from './PlayHistory';
-import { useEffect } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Empty, PageHeader } from '../shared';
-import { useController } from '../../app/useController';
-import type { PointAction, ScoringTeam } from '../../domain';
-import { PointDetailController } from '../../controllers/points/PointDetailController';
+import { useApp } from '../../app/context';
+import { pointDisplay } from './pointPresentation';
+import { allowsPointAction, pointNeedsPrune } from '../../app/pointActions';
+import { pointForGame } from '../../domain';
+import type { ScoringTeam } from '../../domain';
 
 export function PointPage() {
     const { gameId, pointId } = useParams();
@@ -22,14 +25,21 @@ export function PointPage() {
 
 function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) {
     const navigate = useNavigate();
-    const controller = useController(() => new PointDetailController(gameId, pointId));
+    const application = useApp();
+    const [detailsOpen, toggleDetails] = useReducer((open: boolean) => !open, false);
+    const { session, busy } = application;
+    const display = pointDisplay(session, gameId, pointId);
+    const { game, point, needsPrune } = display;
 
     useEffect(() => {
-        void controller.prune();
-    }, [controller, controller.needsPrune]);
+        const currentPoint = pointForGame(application.session, gameId, pointId);
+        if (needsPrune && currentPoint && pointNeedsPrune(currentPoint, application.session)) {
+            void application.run(() =>
+                application.repository.pointAction(gameId, pointId, { kind: 'pruneLine' }),
+            );
+        }
+    }, [application, gameId, pointId, needsPrune]);
 
-    const game = controller.game;
-    const point = controller.point;
     if (!game || !point)
         return (
             <main className="page stack">
@@ -41,15 +51,20 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
         );
 
     async function act(action: PointAction, closeAfter = false) {
-        const saved = await controller.act(action);
+        if (!game || !point) return;
+        const saved = await application.run(() =>
+            application.repository.pointAction(game.id, point.id, action).then(() => true),
+        );
         if (saved && closeAfter) navigate(`/games/${gameId}`);
     }
-    const disabled = (action: PointAction): boolean => controller.busy || !controller.can(action);
+    const can = (action: PointAction): boolean =>
+        !!game && !!point && allowsPointAction(action, game, point, session);
+    const disabled = (action: PointAction): boolean => busy || !can(action);
     const activePlayerList = (
         <ActivePlayers
-            rows={controller.activePlayerRows}
-            busy={controller.busy}
-            can={(action) => controller.can(action)}
+            rows={display.activePlayerRows}
+            busy={busy}
+            can={(action) => can(action)}
             onAction={(action, closeAfter) => void act(action, closeAfter)}
         />
     );
@@ -66,14 +81,14 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
     return (
         <main className="page stack">
             <PageHeader
-                title={controller.title}
-                subtitle={`${controller.teamName} vs. ${controller.opponentName}`}
+                title={display.title}
+                subtitle={`${display.teamName} vs. ${display.opponentName}`}
                 back={`/games/${game.id}`}
             >
-                {controller.canUndo && (
+                {display.canUndo && (
                     <button
                         className="button"
-                        disabled={controller.busy}
+                        disabled={busy}
                         onClick={() => void act({ kind: 'undo' })}
                     >
                         Undo last play
@@ -82,71 +97,71 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
             </PageHeader>
 
             <section className="card stack" aria-label="Point summary">
-                {controller.stage === 'complete' && (
+                {display.stage === 'complete' && (
                     <div
-                        className={`score-strip ${controller.state.scoredBy === 'us' ? 'good' : 'bad'}`}
+                        className={`score-strip ${display.state.scoredBy === 'us' ? 'good' : 'bad'}`}
                     >
-                        <strong>{controller.resultText}</strong>
+                        <strong>{display.resultText}</strong>
                         <span>
-                            {controller.score.us} – {controller.score.them}
+                            {display.score.us} – {display.score.them}
                         </span>
                     </div>
                 )}
                 <div className="row">
                     <div>
-                        <span className="badge">{controller.stageLabel}</span>
-                        <p className="muted">{controller.summary}</p>
+                        <span className="badge">{display.stageLabel}</span>
+                        <p className="muted">{display.summary}</p>
                     </div>
                     <strong>
-                        {controller.score.us} – {controller.score.them}
+                        {display.score.us} – {display.score.them}
                     </strong>
                 </div>
                 <button
                     className="button muted"
-                    aria-expanded={controller.detailsOpen}
-                    onClick={() => controller.toggleDetails()}
+                    aria-expanded={detailsOpen}
+                    onClick={() => toggleDetails()}
                 >
-                    {controller.detailsOpen ? 'Hide details' : 'Show details'}
+                    {detailsOpen ? 'Hide details' : 'Show details'}
                 </button>
-                {controller.detailsOpen && (
+                {detailsOpen && (
                     <dl className="details-grid">
                         <dt>Started on</dt>
-                        <dd>{controller.startedOnText}</dd>
+                        <dd>{display.startedOnText}</dd>
                         <dt>Puller</dt>
-                        <dd>{controller.pullerText}</dd>
+                        <dd>{display.pullerText}</dd>
                         <dt>Disc</dt>
-                        <dd>{controller.holder?.name ?? 'No one'}</dd>
+                        <dd>{display.holder?.name ?? 'No one'}</dd>
                         <dt>Scorer</dt>
                         <dd>
-                            {controller.scorer?.name ??
-                                (controller.state.scoredBy === 'them' ? 'No scorer' : 'Not set')}
+                            {display.scorer?.name ??
+                                (display.state.scoredBy === 'them' ? 'No scorer' : 'Not set')}
                         </dd>
                         <dt>Assist</dt>
-                        <dd>{controller.assist?.name ?? 'None'}</dd>
+                        <dd>{display.assist?.name ?? 'None'}</dd>
                         <dt>Blocks</dt>
                         <dd>
-                            {controller.blockers.map((player) => player.name).join(', ') || 'None'}
+                            {display.blockers.map((player) => player.name).join(', ') || 'None'}
                         </dd>
                     </dl>
                 )}
             </section>
 
-            {controller.showLine && (
+            {display.showLine && (
                 <LinePicker
-                    rows={controller.lineRows}
-                    count={controller.lineCount}
-                    issue={controller.lineIssueText}
-                    busy={controller.busy}
-                    showSubButton={controller.showSubButton}
-                    canSub={controller.can({ kind: 'sub' })}
+                    rows={display.lineRows}
+                    count={display.lineCount}
+                    issue={display.lineIssueText}
+                    busy={busy}
+                    showSubButton={display.showSubButton}
+                    canSub={can({ kind: 'sub' })}
                     onAction={(action) => void act(action)}
                 />
             )}
 
-            {controller.stage === 'scheduled' && (
+            {display.stage === 'scheduled' && (
                 <section className="card stack">
-                    <h2>{controller.startsOnDefense ? 'Choose the puller' : 'Start the point'}</h2>
-                    {!controller.startsOnDefense ? (
+                    <h2>{display.startsOnDefense ? 'Choose the puller' : 'Start the point'}</h2>
+                    {!display.startsOnDefense ? (
                         <button
                             className="button primary"
                             disabled={disabled({ kind: 'startPull' })}
@@ -160,14 +175,14 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                 </section>
             )}
 
-            {(controller.stage === 'defense' ||
-                controller.stage === 'looseDisc' ||
-                controller.stage === 'possession') && (
+            {(display.stage === 'defense' ||
+                display.stage === 'looseDisc' ||
+                display.stage === 'possession') && (
                 <section className="card stack">
-                    <h2>{controller.stageLabel}</h2>
-                    {controller.stage === 'looseDisc' && <p className="muted">Who picks up?</p>}
+                    <h2>{display.stageLabel}</h2>
+                    {display.stage === 'looseDisc' && <p className="muted">Who picks up?</p>}
                     {activePlayerList}
-                    {controller.stage === 'defense' && (
+                    {display.stage === 'defense' && (
                         <button
                             className="button"
                             disabled={disabled({ kind: 'theirTurnover' })}
@@ -176,7 +191,7 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                             Opponent turnover
                         </button>
                     )}
-                    {controller.stage === 'possession' && (
+                    {display.stage === 'possession' && (
                         <button
                             className="button danger"
                             disabled={disabled({ kind: 'ourTurnover' })}
@@ -186,10 +201,10 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                         </button>
                     )}
                     <div className="actions">
-                        {controller.canOpponentScore && (
+                        {display.canOpponentScore && (
                             <button
                                 className="button danger"
-                                disabled={controller.busy}
+                                disabled={busy}
                                 onClick={() =>
                                     void act({ kind: 'result', scoringTeam: 'them' }, true)
                                 }
@@ -197,19 +212,19 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                                 Opponent scores
                             </button>
                         )}
-                        {controller.showSubButton && (
+                        {display.showSubButton && (
                             <button
                                 className="button"
-                                disabled={controller.busy}
+                                disabled={busy}
                                 onClick={() => void act({ kind: 'sub' })}
                             >
                                 Sub players
                             </button>
                         )}
-                        {controller.canUndo && (
+                        {display.canUndo && (
                             <button
                                 className="button"
-                                disabled={controller.busy}
+                                disabled={busy}
                                 onClick={() => void act({ kind: 'undo' })}
                             >
                                 Undo last play
@@ -219,13 +234,13 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                 </section>
             )}
 
-            {controller.stage === 'complete' && (
+            {display.stage === 'complete' && (
                 <section className="card stack">
                     <h2>Correct result</h2>
                     <p className="muted">Change which team won this point.</p>
                     <div className="actions">
-                        {resultButton('us', `${controller.teamName} scored`)}
-                        {resultButton('them', `${controller.opponentName} scored`)}
+                        {resultButton('us', `${display.teamName} scored`)}
+                        {resultButton('them', `${display.opponentName} scored`)}
                     </div>
                     <Link className="button" to={`/games/${game.id}`}>
                         Back to game
@@ -233,7 +248,7 @@ function PointContent({ gameId, pointId }: { gameId: string; pointId: string }) 
                 </section>
             )}
 
-            {controller.history.length > 0 && <PlayHistory events={controller.history} />}
+            {display.history.length > 0 && <PlayHistory events={display.history} />}
         </main>
     );
 }

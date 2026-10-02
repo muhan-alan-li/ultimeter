@@ -1,38 +1,72 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useApp } from '../../app/context';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { useController } from '../../app/useController';
-import {
-    type InstallPrompt,
-    InstallStatusController,
-} from '../../controllers/app/InstallStatusController';
+
+interface InstallPrompt extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 export function InstallStatus() {
-    const controller = useController(() => new InstallStatusController());
+    const application = useApp();
+    const [online, setOnline] = useState(() => navigator.onLine);
+    const [installPrompt, setInstallPrompt] = useState<InstallPrompt>();
+    const [help, setHelp] = useState(false);
+    const [registrationError, setRegistrationError] = useState(false);
+    const [updateError, setUpdateError] = useState(false);
+    const [cached, setCached] = useState(false);
+    const updateBlocked =
+        application.busy ||
+        application.dirty ||
+        application.session.games.some((game) => game.status === 'live');
+    async function install() {
+        if (!installPrompt) {
+            setHelp((value) => !value);
+
+            return;
+        }
+        try {
+            await installPrompt.prompt();
+            await installPrompt.userChoice;
+        } catch {
+            setHelp(true);
+        } finally {
+            setInstallPrompt(undefined);
+        }
+    }
+    async function update(applyUpdate: () => Promise<void>) {
+        setUpdateError(false);
+        try {
+            await applyUpdate();
+        } catch {
+            setUpdateError(true);
+        }
+    }
     const {
         offlineReady: [offlineReady],
         needRefresh: [needRefresh, setNeedRefresh],
         updateServiceWorker,
     } = useRegisterSW({
-        onRegisterError: () => controller.setRegistrationError(true),
+        onRegisterError: () => setRegistrationError(true),
     });
-    const ready = offlineReady || controller.cached;
+    const ready = offlineReady || cached;
     useEffect(() => {
         let active = true;
         if ('serviceWorker' in navigator && import.meta.env.PROD) {
             void navigator.serviceWorker.ready
                 .then((registration) => {
-                    if (active && registration.active) controller.setCached(true);
+                    if (active && registration.active) setCached(true);
                 })
                 .catch(() => {
-                    if (active) controller.setRegistrationError(true);
+                    if (active) setRegistrationError(true);
                 });
         }
-        const updateOnline = () => controller.setOnline(navigator.onLine);
+        const updateOnline = () => setOnline(navigator.onLine);
         const offerInstall = (event: Event) => {
             event.preventDefault();
-            controller.setInstallPrompt(event as InstallPrompt);
+            setInstallPrompt(event as InstallPrompt);
         };
-        const installed = () => controller.setInstallPrompt(undefined);
+        const installed = () => setInstallPrompt(undefined);
         window.addEventListener('online', updateOnline);
         window.addEventListener('offline', updateOnline);
         window.addEventListener('beforeinstallprompt', offerInstall);
@@ -45,21 +79,26 @@ export function InstallStatus() {
             window.removeEventListener('beforeinstallprompt', offerInstall);
             window.removeEventListener('appinstalled', installed);
         };
-    }, [controller]);
+    }, []);
 
     return (
         <>
             <div className="connection-status">
                 <span className="status-dot" data-ready={ready} />
-                <span>{controller.connectionText(ready, controller.online)}</span>
-                <button
-                    className="text-button install-button"
-                    onClick={() => void controller.install()}
-                >
+                <span>
+                    {ready
+                        ? online
+                            ? 'Ready for offline play'
+                            : 'Offline · ready to play'
+                        : online
+                          ? 'Local game storage'
+                          : 'Offline · app cache not confirmed'}
+                </span>
+                <button className="text-button install-button" onClick={() => void install()}>
                     Install app
                 </button>
             </div>
-            {controller.help && (
+            {help && (
                 <aside className="notice">
                     <strong>Add Ultimeter to your Home Screen</strong>
                     <p>
@@ -67,10 +106,10 @@ export function InstallStatus() {
                         Android, use the browser’s Install app menu.
                     </p>
                     <p>Load the app once online before offline play.</p>
-                    <button onClick={() => controller.setHelp(false)}>Got it</button>
+                    <button onClick={() => setHelp(false)}>Got it</button>
                 </aside>
             )}
-            {controller.registrationError && (
+            {registrationError && (
                 <p className="notice" role="status">
                     Offline assets could not be prepared. Reopen the app with a network connection.
                 </p>
@@ -79,21 +118,21 @@ export function InstallStatus() {
                 <aside className="notice">
                     <strong>An app update is ready</strong>
                     <p>
-                        {controller.updateBlocked
+                        {updateBlocked
                             ? 'Finish live games and close forms before updating.'
                             : 'Update when you are ready to reload the app.'}
                     </p>
                     <div className="actions">
                         <button
                             className="primary"
-                            disabled={controller.updateBlocked}
-                            onClick={() => void controller.update(() => updateServiceWorker(true))}
+                            disabled={updateBlocked}
+                            onClick={() => void update(() => updateServiceWorker(true))}
                         >
                             Update
                         </button>
                         <button onClick={() => setNeedRefresh(false)}>Later</button>
                     </div>
-                    {controller.updateError && (
+                    {updateError && (
                         <p role="alert">The update could not be applied. Try again when online.</p>
                     )}
                 </aside>
