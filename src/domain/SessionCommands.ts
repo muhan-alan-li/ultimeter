@@ -7,10 +7,6 @@ export interface CommandSource {
     now(): number;
 }
 
-const defaultSource: CommandSource = {
-    id: () => crypto.randomUUID(),
-    now: () => Date.now(),
-};
 const clean = (value: string): string => value.trim();
 
 function fail(code: string, details: Record<string, string | number> = {}): never {
@@ -27,7 +23,7 @@ function required<T>(value: T | undefined, label: string): T {
 export class SessionCommands {
     constructor(
         private readonly session: Session,
-        private readonly source: CommandSource = defaultSource,
+        private readonly source: CommandSource,
     ) {}
 
     saveTeam(

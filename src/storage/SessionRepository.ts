@@ -1,4 +1,5 @@
 import { type GameAction, gameReducer } from '../app/gameReducer';
+import { createId } from '../app/createId';
 import type { PointAction } from '../app/pointActions';
 import { SessionCommands } from '../domain/SessionCommands';
 import type { RepositoryPort } from './Repository';
@@ -69,7 +70,7 @@ export class SessionRepository implements RepositoryPort {
     private async update<T>(change: (commands: SessionCommands) => T): Promise<T> {
         return this.database.transaction('rw', this.database.state, async () => {
             const value = storedSession(await this.database.state.get(recordId));
-            const result = change(new SessionCommands(value));
+            const result = change(new SessionCommands(value, { id: createId, now: Date.now }));
             await this.database.state.put({ id: recordId, value });
 
             return result;
@@ -77,7 +78,7 @@ export class SessionRepository implements RepositoryPort {
     }
 
     private async transition(action: GameAction): Promise<void> {
-        const transition = { action, idPrefix: crypto.randomUUID(), createdAt: Date.now() };
+        const transition = { action, idPrefix: createId(), createdAt: Date.now() };
         await this.database.transaction('rw', this.database.state, async () => {
             const previous = storedSession(await this.database.state.get(recordId));
             const value = gameReducer(previous, transition);
