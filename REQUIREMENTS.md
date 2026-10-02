@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-NOTE: not all of an ultimate frisbee game's mechanic will be available to start, we will add more features over time 
+NOTE: not all of an ultimate frisbee game's mechanic will be available to start, we will add more features over time
 
 Ultimeter is an app used by ultimate frisbee players to track stats during games.
 Over the course of a team's season, multiple tournaments can occur, and multiple games can occur in a tournament.
@@ -88,8 +88,8 @@ Export game/tournament/season as csv
 ## 3. Data Model
 
 Team -> Roster -> Player
-     -> Season -> Tournament -> Game
-     -> Season -> Game
+-> Season -> Tournament -> Game
+-> Season -> Game
 Game -> Point -> Event
 
 Store point actions as ordered events.
@@ -100,7 +100,8 @@ Derive possession, scores, assists, and reports from events.
 
 ### 4.1 Platform
 
-IOS
+Use an installable PWA on iOS, Android, and desktop browsers.
+Support game entry without a network after the first app load.
 
 ### 4.2 Performance
 

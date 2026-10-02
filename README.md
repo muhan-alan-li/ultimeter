@@ -1,16 +1,74 @@
 # Ulti Stats
 
-Ultimate frisbee stat tracker for iOS.
+Use the PWA to record ultimate frisbee games.
+Manage teams, add players, select lines, and record play.
+Track scores, assists, blocks, substitutions, and halftime.
+Undo live actions and correct completed point results.
 
-## Architecture
+## Run
 
-The app uses MVVM with four layers.
+Use Node.js 24 or later.
+Run these commands from the repository root:
 
-- `ultimeter/Model/` — SwiftData entities and the pure rules
-- `ultimeter/Data/` — the repositories and the atomic write
-- `ultimeter/Features/` — one view and one view model per screen
-- `ultimeter/App/` — the schema and the dependency container
+```sh
+npm ci
+npm run dev
+```
 
-A view renders. A view model decides. A repository writes.
+Open the URL from Vite.
+Use `http://localhost:5173` for local development with the default port.
+Use HTTPS to access the app from another device.
 
-Read `AGENTS.md` before you change the code.
+## Build
+
+Run these commands from the repository root:
+
+```sh
+npm run lint
+npm run format:check
+npm run build
+npm run preview
+```
+
+Use `npm run lint:fix` to fix lint errors.
+Use `npm run format` to format source and documentation.
+
+Serve `dist/` through HTTPS for production.
+Return `index.html` for app routes.
+Use `public/_redirects` on compatible static hosts.
+Use `public/_headers` on hosts that support header files.
+Keep `sw.js` fresh and retain old asset files during updates.
+
+## Install and Record
+
+Load the production app once online.
+Wait for the offline readiness message before offline play.
+Use the browser install control.
+On iOS, use Safari Share, then Add to Home Screen.
+
+Keep game data in the same browser and app origin.
+Save each action immediately to IndexedDB.
+Resume saved game state after a reload or normal app restart.
+Treat local records as temporary data.
+Defer migration, backups, cloud storage, and long-term retention.
+
+## Code
+
+Read `AGENTS.md` before code changes.
+Use this source structure:
+
+```text
+src/
+  domain/        # Model interfaces, selectors, rules, commands
+  storage/       # Repository contract, IndexedDB, live queries
+  controllers/   # App, team, player, game, and point actions
+  views/         # Pages, forms, lists, shared controls
+  app/           # Application object, React adapters, routes, errors
+  styles/        # Layout and themes
+public/          # Icons and host settings
+```
+
+Read `docs/ARCHITECTURE.md` for model and component duties.
+Read `docs/BEHAVIOR.md` for action behavior and known limits.
+Use `docs/ACCEPTANCE.md` for the remaining device checks.
+Read `REQUIREMENTS.md` for later features.

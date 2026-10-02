@@ -1,105 +1,39 @@
-# Contributing to Ulti Stats
+# Contribute to Ulti Stats
 
-## Overview
+Read `AGENTS.md` and `docs/ARCHITECTURE.md` before changes.
+Use Node.js 24 or later.
+Run `npm ci` from the repository root.
+Start development with `npm run dev`.
 
-**Ulti Stats** is an ultimate frisbee stat tracker for iOS. This document outlines how to contribute to the project.
+## Change Code
 
-## How to Run the Project
+Use four spaces for each indentation level.
+Keep one blank line between imports and code.
+Use explicit type imports.
+Use model interfaces for data.
+Use pure selectors for child records.
+Keep domain rules in pure functions.
+Use domain commands for changes to related records.
+Keep storage behind `RepositoryPort`.
+Keep actions and draft state in controllers.
+Compose React pages from reusable components.
+Pass values and callbacks to shared components.
+Commit one action in one database transaction.
+Keep the local database name and record format.
+Keep migration and long-term storage outside the current scope.
 
-### Building & Running
+## Check Changes
 
-The project is an Xcode iOS application built with Swift (target iOS 26.5).
+Run `npm run lint`, `npm run format:check`, and `npm run build` from the repository root.
+Run `npm run lint:fix` to fix lint errors.
+Run `npm run format` to format files.
+Do not run automated tests or simulators.
+Use `docs/ACCEPTANCE.md` for device review.
+Record any incomplete checks.
 
-```bash
-# Clone the repository
-git clone https://github.com/muhan-alan-li/ultimeter.git
-cd ultimeter
+## Submit Changes
 
-# Build the app (requires Xcode 13+)
-xcodebuild -project ultimeter.xcodeproj -scheme ultimeter -configuration Debug
-
-# Run on a simulator or device
-xcrun simctl launch simulator -n "Ulti Stats" --reset
-# Or open in Xcode and press cmd-R
-```
-
-### Development Setup
-
-- **Xcode**: 13.0 or later
-- **Swift**: 5.0+
-- **iOS Target**: 26.5 (iPhone 14+/iPad Pro 12th gen and later)
-- **Signing**: Configure your Apple Developer account in Xcode (Team -> Signing & Capabilities)
-
-## Pull Request Workflow
-
-### Branch Strategy
-
-- Create a new branch for each feature or bug-fix: `feature/<short-description>` or `bugfix/<short-description>`
-- Keep branches short-lived (typically < 1 day)
-- Base every PR on the latest `main` branch
-
-### Rebase & Merge
-
-1. **Rebase** your feature branch onto the latest `main` before submitting a PR.
-2. **Squash-merge** all commits into `main` to maintain a linear commit history.
-3. Ensure the PR title follows [Conventional Commits](https://www.conventionalcommits.org/).
-
-### Example PR Title Format
-
-```
-feat: add shot tracking for players
-
-Fixes #123
-```
-
-Or simply:
-
-```
-fix: resolve nil pointer in team aggregation
-```
-
-## Commit Message Format
-
-We use **Conventional Commits** to keep history organized and generate automated changelogs.
-
-### Structure
-
-```
-<type>(<scope>): <subject>
-
-<optional body>
-
-<footer> (optional – e.g., “breaking” or “hotfix”) </footer>
-```
-
-### Allowed Types
-
-| Type | Description |
-|------|-------------|
-| `feat:` | New feature |
-| `fix:` | Bug fix |
-| `refactor:` | Code refactoring (no functional change) |
-| `docs:` | Documentation changes |
-| `test:` | Test additions/updates |
-| `style:` | Formatting/linting only |
-| `chore:` | Maintenance task (build, script, etc.) |
-| `ci:` | CI/CD pipeline changes |
-| `revert:` | Reverting a previous commit |
-
-### Scope (optional)
-
-A short, hyphen-separated identifier describing the area affected (e.g., `team-aggregation`, `shot-tracking`, `simulator-launch`).
-
-### Breaking Changes
-
-Mark breaking changes with `[breaking]` in the subject line.
-
-## Getting Help
-
-- Check the [README](README.md) for high-level usage
-- Open an issue on GitHub for bugs or feature requests
-- Fork the repo, clone locally, and follow the workflow above
-
-## License
-
-This project is licensed under the MIT License (see LICENSE file for details).
+Use a branch for each change.
+Describe user behavior and relevant checks in the pull request.
+Use a commit prefix such as `feat:`, `fix:`, or `docs:`.
+Keep documentation concise and use Simplified Technical English.
