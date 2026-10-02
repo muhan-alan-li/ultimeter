@@ -13,9 +13,11 @@ Use explicit type imports.
 Use model interfaces for data.
 Use pure selectors for child records.
 Keep domain rules in pure functions.
-Use domain commands for changes to related records.
+Use domain commands or application reducers to change related records.
 Keep storage behind `RepositoryPort`.
-Keep actions and draft state in controllers.
+Keep actions and draft state in React components.
+Use React hooks directly in views.
+Use pure functions for display values.
 Compose React pages from reusable components.
 Pass values and callbacks to shared components.
 Commit one action in one database transaction.

@@ -61,9 +61,8 @@ Use this source structure:
 src/
   domain/        # Model interfaces, selectors, rules, commands
   storage/       # Repository contract, IndexedDB, live queries
-  controllers/   # App, team, player, game, and point actions
-  views/         # Pages, forms, lists, shared controls
-  app/           # Application object, React adapters, routes, errors
+  views/         # Pages, forms, React state, display functions
+  app/           # Application object, reducers, React adapters, routes, errors
   styles/        # Layout and themes
 public/          # Icons and host settings
 ```
